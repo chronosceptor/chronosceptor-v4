@@ -1,0 +1,35 @@
+---
+/** Isla de canvas. Solo el marcado: el arranque vive en la pagina. */
+---
+
+<div id="escena">
+  <canvas id="arena"></canvas>
+  <canvas id="fx"></canvas>
+</div>
+
+<style>
+  #escena {
+    position: fixed;
+    inset: 0;
+    background: #0b0b0c;
+    overflow: hidden;
+  }
+
+  #escena canvas {
+    position: absolute;
+    inset: 0;
+    display: block;
+  }
+
+  /* La capa de arena es un canvas pequeno que el navegador amplia sin suavizar:
+     asi el grano queda nitido y no se paga un drawImage por frame. */
+  #arena {
+    image-rendering: pixelated;
+  }
+
+  /* La capa vectorial va encima y es la que recibe el puntero. */
+  #fx {
+    touch-action: none;
+    cursor: crosshair;
+  }
+</style>

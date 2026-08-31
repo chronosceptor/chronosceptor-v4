@@ -1,0 +1,124 @@
+---
+import SandCanvas from '../components/SandCanvas.astro';
+import NowPlaying from '../components/NowPlaying.astro';
+---
+
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark" />
+    <title>Fabrica de arena</title>
+    <meta
+      name="description"
+      content="Una fabrica de arena que se pinta con los colores de lo que estoy escuchando."
+    />
+  </head>
+  <body>
+    <SandCanvas />
+    <NowPlaying />
+  </body>
+</html>
+
+<style is:global>
+  :root {
+    color-scheme: dark;
+  }
+
+  html,
+  body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    overflow: hidden;
+    background: #0b0b0c;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
+  }
+</style>
+
+<script>
+  import { boot } from '../sand';
+  import { watchNowPlaying, type Track } from '../lib/nowPlaying';
+  import { paletteFromImage } from '../sand/color/extract';
+  import { DEFAULT_PALETTE, rgbCss, type Palette } from '../sand/palette';
+
+  const params = new URLSearchParams(location.search);
+  const seedParam = params.get('seed');
+  /** `?mock` sirve un track fijo: permite afinar el color sin API key. */
+  const mock = params.has('mock');
+
+  const app = boot({
+    sandCanvas: document.getElementById('arena') as HTMLCanvasElement,
+    fxCanvas: document.getElementById('fx') as HTMLCanvasElement,
+    seed: seedParam ? Number(seedParam) : undefined,
+    debug: params.has('debug'),
+  });
+
+  // Para trastear desde la consola mientras se afina.
+  (window as any).fabrica = app;
+
+  // --- Tarjeta de "sonando ahora" ------------------------------------------
+
+  const card = document.getElementById('sonando') as HTMLAnchorElement;
+  const art = document.getElementById('sonando-portada') as HTMLImageElement;
+  const title = document.getElementById('sonando-titulo') as HTMLElement;
+  const artist = document.getElementById('sonando-artista') as HTMLElement;
+  const swatches = document.getElementById('sonando-paleta') as HTMLElement;
+
+  function showCard(track: Track, palette: Palette): void {
+    title.textContent = track.title ?? '';
+    artist.textContent = track.artist ?? '';
+    if (track.art) {
+      art.src = track.art;
+      art.hidden = false;
+    } else {
+      art.removeAttribute('src');
+      art.hidden = true;
+    }
+    if (track.url) card.href = track.url;
+    else card.removeAttribute('href');
+
+    swatches.replaceChildren(
+      ...palette.colors.slice(0, 5).map((c) => {
+        const i = document.createElement('i');
+        i.style.background = rgbCss(c);
+        return i;
+      }),
+    );
+    card.hidden = false;
+    wake();
+  }
+
+  // Se desvanece tras un rato sin actividad y vuelve al primer movimiento.
+  let idleTimer = 0;
+  function wake(): void {
+    card.classList.remove('reposo');
+    clearTimeout(idleTimer);
+    idleTimer = window.setTimeout(() => card.classList.add('reposo'), 7000);
+  }
+  for (const evt of ['pointermove', 'pointerdown', 'keydown'] as const) {
+    window.addEventListener(evt, wake, { passive: true });
+  }
+
+  // --- Enlace entre la musica y la arena -----------------------------------
+
+  watchNowPlaying(async (track) => {
+    if (!track) {
+      // Sin musica sonando se vuelve a la paleta ocre; el regreso del color al
+      // dar play es justo lo que hace visible que la pagina esta escuchando.
+      app.setPalette(DEFAULT_PALETTE);
+      card.hidden = true;
+      return;
+    }
+
+    let palette = DEFAULT_PALETTE;
+    if (track.art) {
+      const extracted = await paletteFromImage(track.art, `${track.artist}|${track.title}`);
+      if (extracted) palette = extracted;
+    }
+    app.setPalette(palette);
+    showCard(track, palette);
+  }, 20000, mock ? '/api/now-playing?mock=1' : '/api/now-playing');
+</script>

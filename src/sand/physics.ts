@@ -1,0 +1,278 @@
+import type { Grid } from './grid';
+import {
+  BELT_L, BELT_R, CHUTE_L, CHUTE_R, EMPTY, SAND, SIEVE, SINK, WALL,
+} from './materials';
+
+/**
+ * Celdas por frame que puede caer un grano en caída libre. Con valores altos el
+ * chorro se rompe en guiones: los granos se separan más de lo que el emisor
+ * puede rellenar y deja de leerse como un hilo continuo.
+ */
+const MAX_VEL = 3;
+/** Pasos diagonales que da un grano por frame sobre una rampa. */
+const CHUTE_STEPS = 3;
+/** Probabilidad de que un grano atraviese una criba en un frame dado. */
+const SIEVE_P = 0.06;
+/**
+ * Probabilidad de deslizamiento lateral. Solo con las diagonales el talud queda
+ * clavado en 45°, que se ve rígido; este arrastre lo tiende hacia ~33°, que es
+ * el ángulo de reposo real de la arena.
+ */
+const CREEP_P = 0.35;
+/**
+ * Capas de arena por encima de la banda que esta sigue arrastrando.
+ *
+ * Si solo se mueve la capa que toca la cinta, la banda transporta un grano de
+ * alto y nada mas: con cualquier caudal decente el resto se apila en el punto
+ * de caida y acaba desbordando por el extremo. Una cinta real arrastra el
+ * monton entero por rozamiento, y sin esto la linea no fluye.
+ */
+const BELT_REACH = 5;
+/**
+ * Pasos diagonales seguidos que puede dar un grano por una ladera.
+ * Con uno solo, un chorro intenso apila más rápido de lo que el montón alcanza
+ * a repartir y crece una torre vertical imposible. Encadenando la caída se
+ * comporta como una avalancha y los conos se mantienen en su ángulo.
+ */
+const AVALANCHE_STEPS = 3;
+
+/**
+ * Un paso de simulación.
+ *
+ * Recorre de abajo hacia arriba para que una columna en caída se desplace
+ * completa en una sola pasada, y alterna el sentido en x cada frame: sin esa
+ * alternancia los montones se recargan de forma visible hacia un lado.
+ *
+ * Solo se procesan las celdas despiertas. Un grano que no logró moverse se
+ * duerme y solo lo revive un cambio en su vecindario 3x3, así una cuenca llena
+ * y asentada cuesta prácticamente nada.
+ */
+export function step(g: Grid, rand: () => number, frame: number): void {
+  const { w, h, size, mat, col, vel, awake, moved, beltSpeed } = g;
+  moved.fill(0);
+  const leftFirst = (frame & 1) === 0;
+
+  for (let y = h - 1; y >= 0; y--) {
+    const row = y * w;
+    const xStart = leftFirst ? 0 : w - 1;
+    const xEnd = leftFirst ? w : -1;
+    const xStep = leftFirst ? 1 : -1;
+
+    for (let x = xStart; x !== xEnd; x += xStep) {
+      const i = row + x;
+      if (mat[i] !== SAND || moved[i] === 1 || awake[i] === 0) continue;
+
+      const belowY = y + 1;
+      const below = belowY < h ? i + w : -1;
+
+      // --- A. Caída libre con aceleración -------------------------------
+      if (below >= 0 && mat[below] === EMPTY) {
+        let v = vel[i]! + 1;
+        if (v > MAX_VEL) v = MAX_VEL;
+        let ny = y;
+        for (let k = 0; k < v; k++) {
+          const ty = ny + 1;
+          if (ty >= h || mat[ty * w + x] !== EMPTY) break;
+          ny = ty;
+        }
+        const dst = ny * w + x;
+        mat[dst] = SAND;
+        col[dst] = col[i]!;
+        vel[dst] = v;
+        moved[dst] = 1;
+        awake[dst] = 1;
+        mat[i] = EMPTY;
+        col[i] = 0;
+        vel[i] = 0;
+        g.wake(x, y);
+        g.wake(x, ny);
+        continue;
+      }
+
+      // A partir de aquí el grano descansa sobre algo.
+      vel[i] = 0;
+      const under = below >= 0 ? mat[below]! : WALL;
+
+      // --- B. Drenaje ---------------------------------------------------
+      if (under === SINK) {
+        g.removeAt(i);
+        continue;
+      }
+
+      // --- C. Arrastre de banda transportadora --------------------------
+      // Se busca la cinta hacia abajo atravesando la arena apilada encima, y
+      // el arrastre pierde fuerza con la profundidad, como el rozamiento real.
+      let beltMat = under;
+      let beltAt = below;
+      let depth = 0;
+      if (under === SAND && below >= 0) {
+        let k = below;
+        for (let d = 1; d <= BELT_REACH; d++) {
+          k += w;
+          if (k >= size) break;
+          const m = mat[k]!;
+          if (m === SAND) continue;
+          if (m === BELT_L || m === BELT_R) {
+            beltMat = m;
+            beltAt = k;
+            depth = d;
+          }
+          break;
+        }
+      }
+      if (beltMat === BELT_L || beltMat === BELT_R) {
+        const bdir = beltMat === BELT_L ? -1 : 1;
+        const grip = beltSpeed[beltAt]! * (1 - depth * 0.13);
+        if (rand() * 255 < grip && slideLateral(g, x, y, i, bdir)) continue;
+      }
+
+      // --- D. Deslizamiento de rampa ------------------------------------
+      if (under === CHUTE_L || under === CHUTE_R) {
+        const dir = under === CHUTE_L ? -1 : 1;
+        let cx = x;
+        let cy = y;
+        let ci = i;
+        let slid = false;
+        for (let s = 0; s < CHUTE_STEPS; s++) {
+          const ni = tryDiagonal(g, cx, cy, ci, dir);
+          if (ni < 0) break;
+          slid = true;
+          ci = ni;
+          cx += dir;
+          cy += 1;
+        }
+        if (slid) {
+          moved[ci] = 1;
+          continue;
+        }
+      }
+
+      // --- E. Criba -----------------------------------------------------
+      if (under === SIEVE && rand() < SIEVE_P) {
+        const ty = y + 2;
+        if (ty < h) {
+          const t = ty * w + x;
+          if (mat[t] === EMPTY) {
+            mat[t] = SAND;
+            col[t] = col[i]!;
+            vel[t] = 0;
+            awake[t] = 1;
+            moved[t] = 1;
+            mat[i] = EMPTY;
+            col[i] = 0;
+            g.wake(x, y);
+            g.wake(x, ty);
+            continue;
+          }
+        }
+      }
+
+      // --- F. Ángulo de reposo: diagonales, encadenadas en avalancha ----
+      const first = rand() < 0.5 ? -1 : 1;
+      let dir = first;
+      let ni = tryDiagonal(g, x, y, i, dir);
+      if (ni < 0) {
+        dir = -first;
+        ni = tryDiagonal(g, x, y, i, dir);
+      }
+      if (ni >= 0) {
+        let cx = x + dir;
+        let cy = y + 1;
+        let ci = ni;
+        for (let a = 1; a < AVALANCHE_STEPS; a++) {
+          const nx = tryDiagonal(g, cx, cy, ci, dir);
+          if (nx < 0) break;
+          ci = nx;
+          cx += dir;
+          cy += 1;
+        }
+        moved[ci] = 1;
+        continue;
+      }
+
+      // --- G. Arrastre lateral hacia un desnivel ------------------------
+      if (rand() < CREEP_P) {
+        const cd = rand() < 0.5 ? -1 : 1;
+        if (tryCreep(g, x, y, i, cd) || tryCreep(g, x, y, i, -cd)) continue;
+      }
+
+      // --- H. Nada funcionó: a dormir -----------------------------------
+      //
+      // Salvo si lo sostiene una cinta o una criba. Esas dos siguen actuando
+      // aunque el grano no se haya podido mover en este frame, y dormirlo lo
+      // dejaria fuera del bucle para siempre: como solo lo despierta un cambio
+      // en su vecindario, un monton compacto sobre una banda se duerme entero
+      // a la vez y la linea se queda congelada sin que nada pueda revivirla.
+      if (beltMat !== BELT_L && beltMat !== BELT_R && under !== SIEVE) awake[i] = 0;
+    }
+  }
+}
+
+/**
+ * Diagonal abajo-`dir`. Exige que la celda lateral también esté libre; sin esa
+ * condición la arena se cuela por las juntas diagonales y atraviesa las rampas
+ * como si no existieran.
+ * Devuelve el índice destino, o -1 si no se pudo.
+ */
+function tryDiagonal(g: Grid, x: number, y: number, i: number, dir: number): number {
+  const { w, h, mat, col, vel, awake, moved } = g;
+  const nx = x + dir;
+  const ny = y + 1;
+  if (nx < 0 || nx >= w || ny >= h) return -1;
+  const side = y * w + nx;
+  const diag = ny * w + nx;
+  if (mat[side] !== EMPTY || mat[diag] !== EMPTY) return -1;
+
+  mat[diag] = SAND;
+  col[diag] = col[i]!;
+  vel[diag] = 0;
+  awake[diag] = 1;
+  moved[diag] = 1;
+  mat[i] = EMPTY;
+  col[i] = 0;
+  vel[i] = 0;
+  g.wake(x, y);
+  g.wake(nx, ny);
+  return diag;
+}
+
+/** Paso lateral puro sobre una superficie. Lo usan las bandas. */
+function slideLateral(g: Grid, x: number, y: number, i: number, dir: number): boolean {
+  const { w, mat, col, vel, awake, moved } = g;
+  const nx = x + dir;
+  if (nx < 0 || nx >= w) return false;
+  const t = y * w + nx;
+  if (mat[t] !== EMPTY) return false;
+
+  mat[t] = SAND;
+  col[t] = col[i]!;
+  vel[t] = 0;
+  awake[t] = 1;
+  moved[t] = 1;
+  mat[i] = EMPTY;
+  col[i] = 0;
+  g.wake(x, y);
+  g.wake(nx, y);
+  return true;
+}
+
+/**
+ * Arrastre hacia un desnivel: si dos celdas más allá hay una caída, el grano da
+ * un paso lateral para asomarse a ella. Es lo que tiende el talud por debajo de
+ * los 45° y hace que los montones se vean de arena y no de ladrillos.
+ */
+function tryCreep(g: Grid, x: number, y: number, i: number, dir: number): boolean {
+  const { w, h, mat } = g;
+  const nx = x + dir;
+  const fx = x + dir * 2;
+  if (nx < 0 || nx >= w || fx < 0 || fx >= w || y + 1 >= h) return false;
+
+  const row = y * w;
+  const rowBelow = row + w;
+  // Al lado hay piso (si no, la diagonal ya se habría encargado)...
+  if (mat[row + nx] !== EMPTY || mat[rowBelow + nx] === EMPTY) return false;
+  // ...y dos celdas más allá hay un escalón hacia abajo.
+  if (mat[row + fx] !== EMPTY || mat[rowBelow + fx] !== EMPTY) return false;
+
+  return slideLateral(g, x, y, i, dir);
+}

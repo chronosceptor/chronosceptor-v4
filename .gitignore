@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.astro/
+.netlify/
+.env
+.DS_Store
+
+# capturas de playwright
+.playwright-mcp/
+*.png
+!docs/*.png
