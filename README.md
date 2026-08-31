@@ -113,6 +113,10 @@ Cosas que parecen arbitrarias en el código y no lo son:
   hace que un montón grande y quieto cueste casi nada.
 - **`/api/art` recibe la ruta relativa del CDN, nunca una URL.** El host es una constante del
   servidor, así que el endpoint no puede convertirse en proxy abierto.
+- **Las credenciales se declaran como secretos de `astro:env`, no se leen con `import.meta.env`.**
+  Vite sustituye `import.meta.env.X` por su valor literal al compilar, así que la API key acababa
+  escrita dentro del artefacto de la función. Declaradas como secretos de servidor se leen del
+  entorno en tiempo de ejecución y nunca se incrustan en el build.
 - **El desplazamiento de un grano barrido sigue la dirección de la pieza que lo empuja.** Una lista
   fija de huecos que mire a la izquierda antes que a la derecha haría que toda pieza en movimiento
   expulsara el material siempre hacia el mismo lado.

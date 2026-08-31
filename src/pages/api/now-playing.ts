@@ -1,4 +1,5 @@
 import type { APIRoute } from 'astro';
+import { LASTFM_API_KEY, LASTFM_USER } from 'astro:env/server';
 
 export const prerender = false;
 
@@ -76,8 +77,8 @@ function artPath(images: Array<{ size?: string; '#text'?: string }> | undefined)
 export const GET: APIRoute = async ({ url }) => {
   if (url.searchParams.has('mock')) return json(MOCK, 0);
 
-  const key = import.meta.env.LASTFM_API_KEY ?? process.env.LASTFM_API_KEY;
-  const user = import.meta.env.LASTFM_USER ?? process.env.LASTFM_USER;
+  const key = LASTFM_API_KEY;
+  const user = LASTFM_USER;
   if (!key || !user) return json({ playing: false, configured: false }, 0);
 
   const query = new URLSearchParams({
