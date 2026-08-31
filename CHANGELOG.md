@@ -19,6 +19,13 @@ versionado según [SemVer](https://semver.org/lang/es/).
     mundo —que lleva el sumidero— y los cuerpos de las demás piezas.
   - **Fuente** — un segundo chorro de arena colocable, con su propio color dominante, de modo
     que la cuenca sale estratificada por chorros y no como una papilla uniforme.
+  - **Bola** — rebota en los cuatro bordes del lienzo y se come la arena que toca. Atraviesa
+    las paredes dibujadas sin tocarlas: rebotar en ellas la dejaría encerrada en el primer
+    cuenco que se encontrase. Se pinta del color de las paredes del usuario. Medido: una
+    frena el 39% de lo que suelta la fuente y seis vacían una pantalla llena —de 7.012 a
+    2.454 granos en 18 s— mientras la fuente sigue soltando arena.
+- `fabrica.inspect().donde` lista qué piezas hay y en qué celda. Hace falta porque `dump()`
+  ya no lo ve todo: la bola y la fuente no escriben nada en el grid.
 - Tres gestos y ninguno más: arrastrar una ficha coloca, arrastrar una pieza la mueve, y se
   quita con la × que aparece al señalarla o soltándola sobre el dock, que se vuelve papelera.
 - Arena en vuelo balístico (`src/sand/ejecta.ts`): partículas con gravedad que viven fuera del

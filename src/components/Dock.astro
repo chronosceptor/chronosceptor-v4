@@ -13,6 +13,7 @@ const PIEZAS = [
   { kind: 'platform', label: 'Plataforma' },
   { kind: 'bomb', label: 'Bomba' },
   { kind: 'emitter', label: 'Fuente' },
+  { kind: 'ball', label: 'Bola: rebota y se come la arena' },
 ] as const;
 ---
 
@@ -48,6 +49,14 @@ const PIEZAS = [
               <>
                 <path d="M5.5 4.5h13l-4.2 5.4h-4.6z" />
                 <path d="M12 12.4v1.7M12 16.2v1.7M12 20v1.2" />
+              </>
+            )}
+            {/* Bola rellena, no hueca: en el lienzo es maciza, y una ficha con
+                el circulo vacio la haria pasar por un aro. */}
+            {kind === 'ball' && (
+              <>
+                <circle cx="12" cy="12" r="5" fill="currentColor" stroke="none" />
+                <path d="M19.5 4.5l-3 3M4.5 19.5l3-3M19.5 19.5l-3-3M4.5 4.5l3 3" />
               </>
             )}
           </svg>

@@ -6,8 +6,9 @@ import { Spinner } from './spinner';
 import { Platform } from './platform';
 import { Bomb } from './bomb';
 import { Emitter } from './emitter';
+import { Ball } from './ball';
 
-export type GadgetKind = 'spinner' | 'platform' | 'bomb' | 'emitter';
+export type GadgetKind = 'spinner' | 'platform' | 'bomb' | 'emitter' | 'ball';
 
 /**
  * Crea una pieza suelta.
@@ -24,6 +25,8 @@ export function createGadget(kind: GadgetKind, cx: number, cy: number): Gadget {
       return new Bomb(cx, cy);
     case 'emitter':
       return new Emitter(cx, cy);
+    case 'ball':
+      return new Ball(cx, cy);
     case 'spinner':
     default:
       return new Spinner(cx, cy);
@@ -55,8 +58,25 @@ export interface Gadget {
   cy: number;
   /** Radio de agarre, en celdas. Manda en el hit-test y en el fantasma. */
   readonly radius: number;
+  /**
+   * Sitio que ocupa de verdad, en celdas. Por defecto, el radio de agarre.
+   *
+   * Son dos cosas distintas y conviene no confundirlas. La bola infla su radio
+   * de agarre a proposito para que se pueda coger en marcha, y esa holgura se
+   * colaba en las reglas de colocacion: exigia 36 celdas entre dos bolas y no
+   * dejaba soltar la quinta, justo cuando echar varias es como se usa.
+   */
+  readonly footprint?: number;
   /** La bomba se marca al explotar; la capa la retira al final del paso. */
   dead: boolean;
+  /**
+   * La esta arrastrando el usuario ahora mismo.
+   *
+   * Solo le importa a las piezas que se mueven solas: la bola tiene que
+   * quedarse quieta mientras la llevas, o se escapa del dedo entre un evento de
+   * puntero y el siguiente.
+   */
+  held?: boolean;
   /** Borra el cuerpo del grid y despierta lo que tenia alrededor. */
   clear(g: Grid): void;
   /** Avanza el estado y vuelve a estampar el cuerpo. */
@@ -87,6 +107,17 @@ export class GadgetLayer {
 
   get full(): boolean {
     return this.items.length >= MAX_GADGETS;
+  }
+
+  /**
+   * Que hay colocado y donde, en celdas.
+   *
+   * `dump()` no sirve para todo desde que hay piezas que se mueven solas: la
+   * bola y la fuente no escriben nada en el grid, asi que en un volcado de
+   * materiales son invisibles.
+   */
+  positions(): Array<{ kind: GadgetKind; x: number; y: number }> {
+    return this.items.map((g) => ({ kind: g.kind, x: g.cx, y: g.cy }));
   }
 
   add(g: Gadget): boolean {
@@ -131,13 +162,13 @@ export class GadgetLayer {
     return null;
   }
 
-  /** ¿Cabe una pieza de este radio aqui sin solapar otra? */
-  fits(x: number, y: number, radius: number, ignore?: Gadget | null): boolean {
+  /** ¿Cabe una pieza de este tamano aqui sin solapar otra? */
+  fits(x: number, y: number, footprint: number, ignore?: Gadget | null): boolean {
     for (const g of this.items) {
       if (g === ignore) continue;
       const dx = x - g.cx;
       const dy = y - g.cy;
-      const r = g.radius + radius;
+      const r = (g.footprint ?? g.radius) + footprint;
       if (dx * dx + dy * dy < r * r) return false;
     }
     return true;

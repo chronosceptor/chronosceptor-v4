@@ -62,6 +62,7 @@ Y una excepción, solo para la bomba: **tocarla la detona** sin esperar a la mec
 | **Plataforma** | Patrulla de izquierda a derecha **llevándose encima** lo que le caiga |
 | **Bomba** | Mecha de 2 s con un anillo que se vacía; revienta un radio de 42 celdas —arena **y paredes**— y se consume |
 | **Fuente** | Un segundo chorro, con su propio color dominante de la paleta |
+| **Bola** | Rebota en los cuatro bordes del lienzo y se come la arena que toca. Atraviesa tus paredes sin tocarlas |
 
 Las piezas van con tamaño y velocidad fijos: no hay ajustes ni panel, igual que no hay selector de
 brocha. Caben diez a la vez; al llegar al tope las fichas del dock se atenúan.
@@ -89,9 +90,12 @@ El dibujo no se guarda: cada visita empieza en blanco.
 | `?mock=1` | Sirve una canción fija con portada local: permite afinar la extracción de color sin API key |
 | `?fill=0.2` | Baja el nivel al que dispara el drenaje. Sin esto, probar la descarga son varios minutos por ciclo |
 
-Desde la consola: `fabrica.inspect()` (arena, paredes, fps, grid, **piezas**, **ejecta** en vuelo y
-**perdidos**), `fabrica.dump(x, y, w, h)` (vuelca los materiales de una región como texto) y
-`fabrica.clear()`.
+Desde la consola: `fabrica.inspect()` (arena, paredes, fps, grid, **piezas**, **dónde** está cada
+una, **ejecta** en vuelo y **perdidos**), `fabrica.dump(x, y, w, h)` (vuelca los materiales de una
+región como texto) y `fabrica.clear()`.
+
+`donde` hace falta porque `dump()` ya no lo ve todo: la bola y la fuente no escriben nada en el
+grid, así que en un volcado de materiales son invisibles.
 
 `perdidos` es el contador que importa cuando se toca una pieza: son granos que salieron del grid y
 no encontraron dónde volver. Debe quedarse en cero. Si sube sin parar, algo está perdiendo masa.
@@ -253,6 +257,19 @@ Cosas que parecen arbitrarias en el código y no lo son:
   de la estructura más corto —las paredes son más recias—, pero entonces el aro punteado del alcance
   estaría mintiendo, que es exactamente por lo que la cruz perdió su llanta dibujada. El aro
   significa "todo lo de aquí dentro se va", y tiene que ser verdad.
+- **La bola rebota en los bordes del lienzo, pero no en las paredes dibujadas.** Es lo contrario de
+  lo que pide el instinto. Sirve para vaciar la pantalla, y una bola que rebotara en el dibujo se
+  quedaría encerrada dentro del primer cuenco que se encontrase y no volvería a limpiar nada.
+- **La bola no tiene cuerpo sólido en el grid.** Podría estamparse como `DYN` para que la arena
+  chocara con ella, pero sería trabajo tirado: lo que hay dentro de su radio deja de existir en el
+  mismo paso, así que nunca habría nada contra lo que chocar.
+- **El radio de agarre y el sitio que ocupa una pieza son dos números distintos** (`radius` y
+  `footprint`). La bola infla su agarre a 18 celdas para poder cogerse en marcha —a 145 celdas/s
+  cruza el cursor en una décima de segundo—, y mientras fueron el mismo número esa holgura se colaba
+  en las reglas de colocación: exigía 36 celdas entre dos bolas y se negaba a soltar la quinta,
+  justo cuando echar varias es como se usa.
+- **Al rebotar se refleja la posición, no solo se invierte la velocidad.** Cambiando únicamente el
+  signo, un paso largo puede terminar más allá del borde y la bola se queda vibrando pegada a él.
 
 ## Historia
 

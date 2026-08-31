@@ -52,6 +52,7 @@ export interface SandApp {
     msRender: number;
     despiertas: number;
     piezas: number;
+    donde: Array<{ kind: string; x: number; y: number }>;
     ejecta: number;
     perdidos: number;
   };
@@ -170,7 +171,14 @@ export function boot(opts: BootOptions): SandApp {
     badge = g ? badgeAt(g) : null;
   }
 
-  /** ¿Cabe una pieza de este radio centrada aqui? */
+  /**
+   * El sitio que ocupa una pieza, que no tiene por que ser su radio de agarre.
+   * Las reglas de colocacion van con esto; el aro y el boton de quitar, con el
+   * radio de agarre.
+   */
+  const size = (g: Gadget): number => g.footprint ?? g.radius;
+
+  /** ¿Cabe una pieza de este tamano centrada aqui? */
   function canPlace(cx: number, cy: number, radius: number, ignore?: Gadget | null): boolean {
     const g = world.grid;
     if (cx - radius < 0 || cx + radius > g.w - 1) return false;
@@ -240,7 +248,10 @@ export function boot(opts: BootOptions): SandApp {
           return; // `held` sigue vacio: esto no era el principio de un arrastre
         }
         held = gadgets.hit(c.x, c.y);
-        if (held) dock?.onGrab();
+        if (held) {
+          held.held = true;
+          dock?.onGrab();
+        }
       },
 
       dragTo: (c) => {
@@ -256,6 +267,7 @@ export function boot(opts: BootOptions): SandApp {
       drop: (c, clientX, clientY, tap) => {
         const g = held;
         held = null;
+        if (g) g.held = false;
         // Se pregunta por la papelera ANTES de soltarla. `isTrash` exige que el
         // dock este en modo papelera, y `onRelease` es justo lo que le quita ese
         // modo: llamandolo primero, la pregunta salia siempre que no, y tirar
@@ -275,8 +287,8 @@ export function boot(opts: BootOptions): SandApp {
           return;
         }
         // Destino invalido: la pieza vuelve a un sitio donde quepa.
-        if (!canPlace(c.x, c.y, g.radius, g)) {
-          const home = nearestFit(c.x, c.y, g.radius, g);
+        if (!canPlace(c.x, c.y, size(g), g)) {
+          const home = nearestFit(c.x, c.y, size(g), g);
           g.cx = home.x;
           g.cy = home.y;
         }
@@ -576,7 +588,7 @@ export function boot(opts: BootOptions): SandApp {
       // estado a su posicion —la plataforma centra ahi su patrulla— se queda
       // creyendo que vive en la esquina imposible donde se instancio.
       ghost.onMoved?.();
-      ghostOk = canPlace(ghost.cx, ghost.cy, ghost.radius);
+      ghostOk = canPlace(ghost.cx, ghost.cy, size(ghost));
     },
 
     endPlacement(): boolean {
@@ -587,7 +599,7 @@ export function boot(opts: BootOptions): SandApp {
       // Un toque sin arrastre la coloca en el centro de la escena, bajo el
       // chorro: es donde se ve lo que hace la pieza.
       if (!ghostMoved) {
-        const home = nearestFit(world.grid.w >> 1, Math.round(world.grid.h * 0.45), g.radius);
+        const home = nearestFit(world.grid.w >> 1, Math.round(world.grid.h * 0.45), size(g));
         g.cx = home.x;
         g.cy = home.y;
       } else if (!ghostOk) {
@@ -620,6 +632,9 @@ export function boot(opts: BootOptions): SandApp {
         msRender: +msRender.toFixed(2),
         despiertas,
         piezas: gadgets.count,
+        // Que hay y donde. La bola y la fuente no escriben en el grid, asi que
+        // un dump() de materiales no las encuentra.
+        donde: gadgets.positions(),
         ejecta: ejecta.count,
         // Granos que no encontraron hueco al aterrizar. Deberia quedarse en
         // cero o casi: si sube sin parar, la ejecta esta perdiendo masa.
