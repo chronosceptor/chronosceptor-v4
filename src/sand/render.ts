@@ -1,7 +1,12 @@
 import type { Grid } from './grid';
 import { EMPTY, IS_MASS, MATERIAL_COUNT, SAND } from './materials';
 import { THEME, packColor } from './palette';
-import type { DrawCtx } from './machines';
+
+/** Contexto de la capa vectorial: `s` son pixeles CSS por celda. */
+export interface DrawCtx {
+  ctx: CanvasRenderingContext2D;
+  s: number;
+}
 
 /**
  * Render en dos capas superpuestas:
@@ -85,36 +90,37 @@ export class Renderer {
     return { ctx, s: this.s };
   }
 
-  /** La tolva, unica fuente de la escena. */
-  drawHopper(d: DrawCtx, x: number): void {
+  /** La fuente, en el centro superior. */
+  drawSource(d: DrawCtx, x: number): void {
     const { ctx, s } = d;
     ctx.strokeStyle = THEME.structureSoft;
     ctx.lineWidth = 1;
-    const w = Math.max(7, s * 4);
+    const w = Math.max(8, s * 5);
     const px = (x + 0.5) * s;
     ctx.beginPath();
     ctx.moveTo(px - w, 0);
-    ctx.lineTo(px - w * 0.25, s * 4);
-    ctx.lineTo(px + w * 0.25, s * 4);
+    ctx.lineTo(px - w * 0.22, s * 5);
+    ctx.lineTo(px + w * 0.22, s * 5);
     ctx.lineTo(px + w, 0);
     ctx.stroke();
   }
 
-  /** Círculo de la brocha bajo el puntero. */
-  drawCursor(d: DrawCtx, px: number, py: number, radiusCells: number, digging: boolean): void {
+  /**
+   * Circulo de la brocha bajo el puntero.
+   *
+   * En modo goma se dibuja discontinuo: es la unica senal de que el gesto va a
+   * borrar en vez de dibujar, y sin ella el cambio de modo por contexto resulta
+   * invisible hasta que ya es tarde.
+   */
+  drawCursor(d: DrawCtx, px: number, py: number, radiusCells: number, erasing: boolean): void {
     const { ctx, s } = d;
     ctx.save();
-    ctx.strokeStyle = digging ? THEME.inkBright : THEME.ink;
+    ctx.strokeStyle = erasing ? THEME.inkBright : THEME.ink;
     ctx.lineWidth = 1;
+    if (erasing) ctx.setLineDash([3, 3]);
     ctx.beginPath();
-    ctx.arc(px, py, radiusCells * s, 0, Math.PI * 2);
+    ctx.arc(px, py, Math.max(3, radiusCells * s), 0, Math.PI * 2);
     ctx.stroke();
-    if (digging) {
-      ctx.beginPath();
-      ctx.moveTo(px - 4, py);
-      ctx.lineTo(px + 4, py);
-      ctx.stroke();
-    }
     ctx.restore();
   }
 }

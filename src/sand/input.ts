@@ -1,29 +1,39 @@
-export type PointerMode = 'pour' | 'dig';
+import type { Point } from './draw';
+
+export type StrokeMode = 'draw' | 'erase';
+
+export interface InputHooks {
+  /** Pixeles CSS del elemento a coordenadas de celda. */
+  toCell(px: number, py: number): Point;
+  /** ¿Hay pared del usuario ahi? Decide si el gesto dibuja o borra. */
+  hasWall(cell: Point): boolean;
+  /** Pinta el segmento entre dos celdas. */
+  paint(from: Point, to: Point, erase: boolean): void;
+  /** Primer trazo de la sesion: sirve para retirar la pista inicial. */
+  onFirstStroke(): void;
+}
 
 /**
- * Estado del puntero. No aplica nada por sí mismo: el bucle principal lo lee
- * cada frame, así el ritmo de vertido no depende de cuántos eventos mande el
- * navegador.
+ * Gestos de dibujo.
+ *
+ * El trazo se aplica **en el evento**, no en el bucle de simulacion. Leyendolo
+ * desde el bucle solo se conoce la ultima posicion del puntero y se pierden
+ * todos los puntos intermedios, que es justo lo que rompe las lineas rapidas.
  */
 export class Input {
   x = 0;
   y = 0;
   present = false;
   active = false;
-  mode: PointerMode = 'pour';
-  leverHover = false;
+  mode: StrokeMode = 'draw';
 
+  private last: Point | null = null;
+  private drew = false;
   private readonly handlers: Array<[string, EventListener]> = [];
 
   constructor(
     private readonly el: HTMLElement,
-    private readonly hooks: {
-      /** ¿El puntero cae sobre la palanca? */
-      isLever: (x: number, y: number) => boolean;
-      onLever: () => void;
-      /** ¿Hay arena bajo el puntero? Decide excavar en vez de verter. */
-      hasSand: (x: number, y: number) => boolean;
-    },
+    private readonly hooks: InputHooks,
   ) {
     this.on('pointerdown', (e) => this.down(e as PointerEvent));
     this.on('pointermove', (e) => this.move(e as PointerEvent));
@@ -31,8 +41,12 @@ export class Input {
     this.on('pointercancel', () => this.up());
     this.on('pointerleave', () => {
       this.present = false;
-      this.up();
     });
+    this.on('pointerenter', () => {
+      this.present = true;
+    });
+    // Sin esto el boton derecho abre el menu del navegador a media goma.
+    this.on('contextmenu', (e) => e.preventDefault());
   }
 
   private on(type: string, fn: EventListener): void {
@@ -40,34 +54,62 @@ export class Input {
     this.handlers.push([type, fn]);
   }
 
-  private local(e: PointerEvent): void {
+  private local(e: PointerEvent): Point {
     const r = this.el.getBoundingClientRect();
     this.x = e.clientX - r.left;
     this.y = e.clientY - r.top;
     this.present = true;
+    return this.hooks.toCell(this.x, this.y);
   }
 
   private down(e: PointerEvent): void {
-    this.local(e);
-    if (this.hooks.isLever(this.x, this.y)) {
-      this.hooks.onLever();
-      return;
-    }
-    // El modo se fija en el pointerdown y se mantiene todo el gesto: si se
-    // recalculara en cada movimiento, excavar alternaría con verter y sería
-    // imposible de controlar.
-    this.mode = this.hooks.hasSand(this.x, this.y) ? 'dig' : 'pour';
+    const cell = this.local(e);
+    // El boton derecho fuerza borrar; con el izquierdo lo decide el contexto:
+    // empezar sobre una pared borra, empezar sobre vacio dibuja. El modo se
+    // fija para todo el gesto — recalculandolo en cada movimiento alternaria
+    // solo y seria imposible de controlar.
+    this.mode = e.button === 2 || this.hooks.hasWall(cell) ? 'erase' : 'draw';
     this.active = true;
-    this.el.setPointerCapture?.(e.pointerId);
+    this.last = cell;
+    // Lanza NotFoundError si el puntero ya no esta activo (un toque que se
+    // suelta antes de que corra el handler). Sin proteger, la excepcion aborta
+    // el resto del metodo y se pierden la primera marca del trazo y la senal de
+    // primer trazo: el gesto empieza cojo sin que nada lo indique.
+    try {
+      this.el.setPointerCapture?.(e.pointerId);
+    } catch {
+      /* sin captura: el gesto sigue funcionando mientras no salga del canvas */
+    }
+
+    this.hooks.paint(cell, cell, this.mode === 'erase');
+    if (!this.drew) {
+      this.drew = true;
+      this.hooks.onFirstStroke();
+    }
   }
 
   private move(e: PointerEvent): void {
-    this.local(e);
-    this.leverHover = !this.active && this.hooks.isLever(this.x, this.y);
+    if (!this.active) {
+      this.local(e);
+      return;
+    }
+    // Los eventos agrupados traen las posiciones intermedias que el navegador
+    // junto en un solo `pointermove`. Sin leerlas se pierde fidelidad en los
+    // trazos rapidos aunque se interpole.
+    const points = e.getCoalescedEvents?.() ?? [];
+    const seq = points.length > 0 ? points : [e];
+    const erase = this.mode === 'erase';
+
+    for (const p of seq) {
+      const cell = this.local(p as PointerEvent);
+      if (this.last) this.hooks.paint(this.last, cell, erase);
+      this.last = cell;
+    }
   }
 
   private up(): void {
     this.active = false;
+    this.last = null;
   }
 
   destroy(): void {

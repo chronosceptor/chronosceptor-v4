@@ -1,21 +1,14 @@
-# Fábrica de arena
+# Sandbox
 
-Una línea de ensamblaje a pantalla completa. Una sola tolva arriba suelta
-material, que baja en serpentina por bandas transportadoras —de izquierda a
-derecha, cae por una rampa de transferencia, de derecha a izquierda en el tramo
-siguiente— pasando por escalones y balancines, hasta una cinta de reparto que
-lo deposita en la cuenca de mezcla del fondo.
+Un lienzo de física a pantalla completa. El mundo arranca vacío, cae arena desde el centro superior,
+y con el ratón o el dedo se dibujan paredes que la desvían — como un MS Paint donde el trazo *es* la
+física. Una rampa la hace bajar, una U la atrapa, un embudo la concentra.
 
-El recorrido es uno solo y se puede seguir con la vista de principio a fin, como
-un circuito de canicas o una cinta de Factorio.
+No hay herramientas que elegir: hay una sola materia sólida y todo el comportamiento sale de la
+forma que dibujes.
 
-El color de la arena sale de la portada del disco que se esté escuchando en ese
-momento, vía Last.fm. Como la cuenca no se vacía sola mientras quepa más, sus
-estratos son la línea de tiempo de la sesión de escucha.
-
-Reinterpretación del módulo de *After Dark* de los noventa que tenía las vigas y
-las bandas (`docs/after-dark-referencia.png`), pero con la maquinaria reducida a
-líneas finas para que el único color de la escena sea la arena.
+El color de la arena sale de la portada del disco que estés escuchando, vía Last.fm. Como la fuente
+rota el color por lotes, los montones que atrapes quedan estratificados.
 
 ## Arranque
 
@@ -33,36 +26,34 @@ LASTFM_API_KEY=   # gratis en https://www.last.fm/api/account/create
 LASTFM_USER=      # tu usuario de Last.fm
 ```
 
-Sin esas variables la página funciona igual, con la paleta ocre por defecto.
+Sin esas variables funciona igual, con la paleta ocre por defecto.
+
+## Cómo se usa
+
+- **Arrastrar sobre vacío** dibuja una pared.
+- **Arrastrar empezando sobre una pared tuya** la borra. El modo se decide al empezar el gesto y se
+  mantiene hasta soltar, así que no alterna solo a media línea.
+- **Clic derecho arrastrando** fuerza el borrado esté donde esté.
+- **Clear** vacía el lienzo entero.
+
+El mismo gesto funciona con dedo y con ratón: no hace falta ningún selector de herramienta ni gestos
+que haya que aprender.
+
+La arena desaparece al salir por el borde inferior, así que el mundo nunca se inunda solo. Sí puede
+inundarse si dibujas una presa que cruce toda la pantalla — es física honesta, y para eso está
+`Clear`. Las dos últimas filas están reservadas: no se puede dibujar sobre el drenaje.
+
+El dibujo no se guarda: cada visita empieza en blanco.
 
 ## Parámetros de URL
 
 | Parámetro | Para qué |
 |---|---|
-| `?seed=123` | Reconstruye exactamente el mismo layout. Imprescindible para depurar la física |
-| `?debug=1` | Superpone fps, conteo de arena, celdas despiertas, llenado de la cuenca y número de máquinas |
+| `?debug=1` | Superpone fps, conteo de arena y paredes, tamaño de grid y modo de brocha |
 | `?mock=1` | Sirve una canción fija con portada local: permite afinar la extracción de color sin API key |
 
-Desde la consola hay tres herramientas de diagnóstico:
-
-- `fabrica.inspect()` — llenado, drenaje en curso, arena total, troneras
-  abiertas, bandas de archivo.
-- `fabrica.probe()` — histograma de arena por columnas y por filas. Sirve para
-  ver de un vistazo si la línea fluye o dónde se está acumulando.
-- `fabrica.dump(x, y, w, h)` — vuelca los materiales de una región como texto.
-  Es lo que permite ver por qué algo no pasa por donde debería.
-
-## Cómo se interactúa
-
-- **Click o toque en el vacío** vierte arena en la paleta que esté corriendo.
-- **Click o toque sobre un montón** excava en él. El modo se decide al empezar
-  el gesto y se mantiene hasta soltar.
-- **La palanca**, a la izquierda de la cuenca, abre las troneras del piso y
-  vacía todo. Al 100% se vacía sola, pero el medidor pulsa desde el 90% para
-  que dé tiempo a jalarla.
-- Cada vaciado deja una banda en la franja permanente del borde inferior:
-  a mano la deja de altura completa, automático de media altura. La franja
-  se guarda en `localStorage`, así que sobrevive a recargas.
+Desde la consola: `fabrica.inspect()` (arena, paredes, fps, grid), `fabrica.dump(x, y, w, h)`
+(vuelca los materiales de una región como texto) y `fabrica.clear()`.
 
 ## Estructura
 
@@ -72,73 +63,60 @@ src/
   pages/api/now-playing.ts proxy de Last.fm (la API key nunca llega al browser)
   pages/api/art.ts         proxy de portadas (same-origin => canvas legible)
   components/              isla de canvas y tarjeta de "sonando ahora"
-  sand/                    nucleo de simulacion, sin dependencias de Astro
+  sand/
+    world.ts               mundo vacio, fuente y drenaje del fondo
+    draw.ts                brocha, interpolacion de trazo, dibujar y borrar
+    input.ts               gestos
+    index.ts               bucle principal
+    physics.ts             el automata celular
+    grid.ts, materials.ts, palette.ts, render.ts, rng.ts, color/extract.ts
   lib/nowPlaying.ts        poller cliente
 php/                       los dos endpoints en PHP, por si va a un VPS/cPanel
 ```
 
-`src/sand/` no importa nada de Astro: expone `boot(canvas, fx, opts)` y se puede
-mover a cualquier otro sitio tal cual.
+`src/sand/` no importa nada de Astro: expone `boot({ sandCanvas, fxCanvas })` y se puede mover a
+cualquier otro sitio tal cual.
 
 ## Despliegue
 
-Por defecto sale a Netlify (`@astrojs/netlify`): el sitio es estático salvo los
-dos endpoints de `/api`, que llevan `prerender = false` y se vuelven functions.
-Las variables de entorno se ponen en el panel de Netlify.
+Por defecto sale a Netlify (`@astrojs/netlify`): el sitio es estático salvo los dos endpoints de
+`/api`, que llevan `prerender = false` y se vuelven functions. Las variables de entorno se ponen en
+el panel de Netlify.
 
-Si acaba en el VPS con cPanel, el build estático es el mismo y solo hay que
-servir `php/now-playing.php` y `php/art.php` en `/api/now-playing` y `/api/art`.
-Las credenciales van por `SetEnv` en el `.htaccess`.
+Si acaba en un VPS con cPanel, el build estático es el mismo y solo hay que servir
+`php/now-playing.php` y `php/art.php` en `/api/now-playing` y `/api/art`.
 
-## Decisiones no obvias del motor
+## Decisiones no obvias
 
 Cosas que parecen arbitrarias en el código y no lo son:
 
-- **El color de cada grano se guarda ya resuelto (`Uint32Array`), no como índice
-  de paleta.** Es lo que permite que la cuenca sea una línea de tiempo: al
-  cambiar de canción los granos viejos conservan su color en vez de remaparse a
-  la paleta nueva. Cuesta 4 bytes por celda y los vale.
-- **Una sola fuente, no varias.** Con una boquilla el recorrido se puede seguir
-  entero y cada cambio de color viaja por la línea como un frente visible antes
-  de llegar abajo. Con varias fuentes eso se pierde y solo se ve lluvia.
-- **El caudal va muy por debajo del máximo de la cinta.** En un autómata de
-  arena una cinta solo mueve un grano si la celda de delante está libre, así que
-  su caudal máximo se da con la banda medio llena: si se compacta, el transporte
-  se desploma a cero y la línea se atasca como un embotellamiento.
-- **La cinta arrastra el montón entero, no solo la capa que la toca.** Sin eso
-  transporta un grano de alto y el resto se apila en el punto de caída.
-- **Un grano sostenido por una cinta nunca se duerme.** Es la excepción a la
-  optimización de sueño, y no es opcional: un montón compacto sobre una banda se
-  duerme entero a la vez y nada puede volver a despertarlo, así que la línea se
-  queda congelada para siempre.
-- **Las rampas de transferencia arrancan tres celdas por debajo de la cinta y
-  desde el final REAL del tramo.** Pegadas a la banda, su primera diagonal choca
-  contra la propia cinta; trazadas desde la altura nominal del tramo, atraviesan
-  por el medio la última banda cuando un módulo bajó la línea.
-- **El borde de un balancín va por debajo del nivel de la banda.** A la misma
-  altura no recibe el material: lo frena, y el tramo entero se atasca detrás.
-- **El último tramo muere en el centro, no en el borde**, para que la entrega
-  caiga en mitad de la cinta de reparto y esta pueda barrer hacia los dos lados.
-- **La diagonal exige que la celda lateral también esté libre.** Sin esa
-  condición la arena se cuela por las juntas de las rampas y las atraviesa.
-- **Las diagonales se encadenan hasta tres pasos por frame (avalancha).** Con un
-  solo paso, un chorro intenso apila más rápido de lo que el montón reparte y
-  crece una torre vertical imposible.
-- **Rampas y embudos tienen dos celdas de grosor.** Una diagonal de una celda
-  solo se toca por las esquinas y en pantalla se lee como puntos sueltos.
-- **El llenado se mide por altura de superficie (percentil 90 de las columnas),
-  no por volumen.** La arena se apila en conos: por volumen la cuenca marcaría
-  55% justo cuando los picos ya se salen por arriba y sepultan las máquinas.
-- **El drenaje abre cinco troneras, no el piso entero.** Con el piso completo la
-  cuenca se vacía en dos segundos y no se ve nada; por ranuras los estratos se
-  hunden en embudo durante varios segundos.
-- **Los granos asentados se duermen** y solo los revive un cambio en su
-  vecindario 3x3. Es lo que hace que una cuenca llena cueste casi nada.
-- **`/api/art` recibe la ruta relativa del CDN, nunca una URL.** El host es una
-  constante del servidor, así que el endpoint no puede convertirse en proxy
-  abierto: no hay nada que validar porque no hay nada que el cliente controle.
-- **Muros laterales y topes de entrada.** Los muros encierran la línea de arriba
-  abajo y el tope retiene el montón que se forma en el punto de caída, que si no
-  se extiende hacia atrás por su propio talud y se derrama por el extremo de la
-  cinta. El tope solo se pone donde el extremo está muerto: si la banda recibe
-  material de un módulo, un tope ahí taparía justo el punto de entrega.
+- **El trazo se interpola y se aplica en el evento, no en el bucle de simulación.** Los eventos de
+  puntero llegan espaciados y a 120 Hz un movimiento rápido salta decenas de celdas entre uno y
+  otro. Estampando solo donde cae el evento, la línea sale punteada y la arena se cuela por los
+  huecos. Además se leen los eventos agrupados (`getCoalescedEvents`), que traen las posiciones
+  intermedias que el navegador juntó.
+- **`setPointerCapture` va envuelto en try/catch.** Lanza `NotFoundError` si el puntero ya no está
+  activo, y esa excepción abortaría el resto del handler: se perderían la primera marca del trazo y
+  la señal de primer trazo, con el gesto empezando cojo y sin nada que lo indicara.
+- **Una brocha de una sola celda ya retiene la arena.** La regla diagonal de la física exige que la
+  celda lateral también esté libre, así que un trazo fino no gotea y no hay razón para engordarlo.
+- **El color de cada grano se guarda ya resuelto (`Uint32Array`), no como índice de paleta.** Al
+  cambiar de canción los granos viejos conservan su color en vez de remaparse, y por eso los
+  montones quedan estratificados.
+- **Los granos asentados se duermen** y solo los revive un cambio en su vecindario 3x3. Es lo que
+  hace que un montón grande y quieto cueste casi nada.
+- **`/api/art` recibe la ruta relativa del CDN, nunca una URL.** El host es una constante del
+  servidor, así que el endpoint no puede convertirse en proxy abierto.
+- **El desplazamiento de un grano barrido sigue la dirección de la pieza que lo empuja.** Una lista
+  fija de huecos que mire a la izquierda antes que a la derecha haría que toda pieza en movimiento
+  expulsara el material siempre hacia el mismo lado.
+
+## Historia
+
+Antes de esto el proyecto fue una **fábrica generativa**: una línea de ensamblaje en serpentina con
+cintas transportadoras, balancines, ruedas de paletas y una cuenca con palanca de vaciado, todo
+colocado por un generador con semilla. Funcionaba, pero solo se podía mirar.
+
+Está guardada en el primer commit del repositorio (`git log`), por si algún día se quiere recuperar
+el generador o el vocabulario de máquinas. La física de cintas y rampas sigue viva en `physics.ts`
+aunque ahora no se use: es la base si alguna vez se quiere una segunda materia dibujable.
