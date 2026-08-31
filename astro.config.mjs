@@ -5,6 +5,7 @@ import netlify from '@astrojs/netlify';
 // El sitio es estático salvo los dos endpoints de /api, que llevan
 // `export const prerender = false` y se vuelven functions en Netlify.
 export default defineConfig({
+  site: 'https://chronosceptor.com',
   output: 'static',
   adapter: netlify(),
   devToolbar: { enabled: false },

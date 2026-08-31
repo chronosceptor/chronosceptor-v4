@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Fondo del lienzo -->
+  <rect width="32" height="32" fill="#0b0b0c"/>
+  <!-- Un hilo de arena cayendo y el monton que forma abajo. A 16px solo
+       sobreviven la linea vertical y la base, que es justo lo que hay que
+       reconocer. -->
+  <g fill="#e0b48c">
+    <rect x="15" y="3" width="2" height="2"/>
+    <rect x="15" y="7" width="2" height="2"/>
+    <rect x="15" y="11" width="2" height="2"/>
+  </g>
+  <rect x="15" y="15" width="2" height="2" fill="#f2e4ce"/>
+  <g fill="#c97b4a">
+    <rect x="13" y="19" width="6" height="2"/>
+    <rect x="10" y="21" width="12" height="2"/>
+    <rect x="7" y="23" width="18" height="2"/>
+    <rect x="4" y="25" width="24" height="2"/>
+  </g>
+  <rect x="2" y="27" width="28" height="2" fill="#7e9b8a"/>
+</svg>
