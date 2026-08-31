@@ -71,19 +71,41 @@ import NowPlaying from '../components/NowPlaying.astro';
   const when = document.getElementById('sonando-cuando') as HTMLElement;
   const swatches = document.getElementById('sonando-paleta') as HTMLElement;
 
-  /** "4 min ago" / "1 h ago". Vacio si la cancion viene marcada en curso. */
+  /**
+   * Contexto temporal: si suena ahora, o cuanto hace que se escucho.
+   *
+   * El caso en vivo es el que mas dice y antes no se etiquetaba: quedaba vacio,
+   * indistinguible de una cancion de hace rato.
+   */
   function agoLabel(track: Track): string {
-    if (track.playing || !track.playedAt) return '';
-    const min = Math.max(0, Math.round(Date.now() / 1000 - track.playedAt) / 60);
+    if (track.playing) return 'now playing';
+    if (!track.playedAt) return '';
+    const min = Math.max(0, (Date.now() / 1000 - track.playedAt) / 60);
     if (min < 1) return 'just now';
-    if (min < 60) return `${Math.round(min)} min`;
-    return `${Math.round(min / 60)} h`;
+    if (min < 60) return `${Math.round(min)} min ago`;
+    return `${Math.round(min / 60)} h ago`;
   }
 
+  /** Cancion en pantalla, para poder refrescar su antiguedad. */
+  let current: Track | null = null;
+
+  /**
+   * La antiguedad se recalcula sola cada medio minuto.
+   *
+   * El sondeo solo avisa cuando cambia la cancion, asi que sin esto la etiqueta
+   * se congela en el valor que tuviera al aparecer: diria "just now" una hora
+   * despues.
+   */
+  window.setInterval(() => {
+    if (current) when.textContent = agoLabel(current);
+  }, 30000);
+
   function showCard(track: Track, palette: Palette): void {
+    current = track;
     title.textContent = track.title ?? '';
     artist.textContent = track.artist ?? '';
     when.textContent = agoLabel(track);
+    when.classList.toggle('vivo', track.playing);
     if (track.art) {
       art.src = track.art;
       art.hidden = false;
@@ -124,6 +146,7 @@ import NowPlaying from '../components/NowPlaying.astro';
         // Sin musica sonando se vuelve a la paleta ocre; el regreso del color
         // al dar play es lo que hace visible que la pagina esta escuchando.
         app.setPalette(DEFAULT_PALETTE);
+        current = null;
         card.hidden = true;
         return;
       }

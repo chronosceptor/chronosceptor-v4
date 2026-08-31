@@ -97,6 +97,16 @@
     flex: none;
     color: #4a4a53;
     font-size: 9px;
+    /* Mismo tratamiento que el artista: comparten renglon y con uno en
+       versalitas y el otro en caja baja se leen como dos cosas distintas. */
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+  }
+
+  /* Sonando ahora mismo: es el estado que mas dice, y merece destacar algo
+     sobre el "hace un rato" sin llegar a competir con el titulo. */
+  #sonando-cuando.vivo {
+    color: #8f8f9b;
   }
 
   #sonando-cuando:not(:empty)::before {

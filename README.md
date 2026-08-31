@@ -136,8 +136,11 @@ Cosas que parecen arbitrarias en el código y no lo son:
 - **Vale el último scrobble reciente, no solo la señal "now playing".** Muchos reproductores nunca
   mandan esa señal y solo scrobblean la canción al terminarla; mirando únicamente `nowplaying` la
   página se queda en la paleta por defecto aunque haya música sonando, que es indistinguible de
-  estar rota. Se acepta el último scrobble de los últimos 25 minutos, y la tarjeta dice cuánto hace
-  para no dar por "sonando" algo que quizá ya terminó.
+  estar rota. Se acepta el último scrobble de los últimos 25 minutos, y la tarjeta etiqueta siempre
+  el estado —`NOW PLAYING` o `13 MIN AGO`— para no dar por "sonando" algo que quizá ya terminó.
+- **La antigüedad se recalcula sola cada medio minuto.** El sondeo solo avisa cuando cambia la
+  canción, así que sin un temporizador propio la etiqueta se congela en el valor que tuviera al
+  aparecer y diría "just now" una hora después.
 
 ## Historia
 
