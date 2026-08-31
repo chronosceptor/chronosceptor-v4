@@ -13,7 +13,10 @@ versionado según [SemVer](https://semver.org/lang/es/).
   - **Cruz giratoria** — cuatro aspas que giran y avientan la arena hacia el lado del giro.
   - **Plataforma** — patrulla de izquierda a derecha llevándose encima lo que le caiga.
   - **Bomba** — mecha de 2 s con un anillo que se vacía, o se detona tocándola; revienta un
-    radio de 42 celdas y se consume. No borra las paredes del usuario.
+    radio de 42 celdas y se consume. Se lleva por delante tanto la arena como las paredes
+    dibujadas: abre un boquete en el trazo y lo que aguantaba encima se desploma por él. El
+    borde del agujero sale deshilachado, no recortado a compás. Intocables el suelo del
+    mundo —que lleva el sumidero— y los cuerpos de las demás piezas.
   - **Fuente** — un segundo chorro de arena colocable, con su propio color dominante, de modo
     que la cuenca sale estratificada por chorros y no como una papilla uniforme.
 - Tres gestos y ninguno más: arrastrar una ficha coloca, arrastrar una pieza la mueve, y se

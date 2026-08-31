@@ -1,5 +1,5 @@
 import type { Grid } from '../grid';
-import { DYN, SAND } from '../materials';
+import { DYN, SAND, WALL } from '../materials';
 import { THEME } from '../palette';
 import type { DrawCtx } from '../render';
 import type { Gadget, TickCtx } from './index';
@@ -25,6 +25,14 @@ const POWER = 520;
 const LIFT = 120;
 /** Duracion del anillo de choque, en segundos. */
 const FLASH = 0.35;
+/**
+ * Fraccion del radio dentro de la cual la pared se lleva siempre.
+ *
+ * Mas alla, la probabilidad cae hasta cero justo en el borde, y el agujero
+ * queda deshilachado. Con un corte limpio a radio fijo, lo que aparece en medio
+ * de un trazo hecho a mano parece un recorte de compas y no una explosion.
+ */
+const RUBBLE_CORE = 0.72;
 
 /**
  * Bomba de mecha.
@@ -33,8 +41,16 @@ const FLASH = 0.35;
  * tocarla antes la detona en el acto. Cuando estalla convierte en arena
  * balistica todo lo que tiene alrededor y se consume.
  *
- * No destruye las paredes del usuario: el dibujo es el trabajo de quien esta
- * jugando y una pieza que lo borrase de golpe seria un castigo, no un juguete.
+ * Se lleva por delante tanto la arena como las paredes dibujadas — abre un
+ * boquete en el trazo y lo que aguantaba encima se desploma por el.
+ *
+ * Al principio respetaba el dibujo, por no destruir el trabajo de quien esta
+ * jugando. Resulto ser la decision equivocada: una bomba que no rompe nada de
+ * lo que has construido no es una bomba, y el aro punteado del alcance ya avisa
+ * de lo que se va a llevar antes de que estalle.
+ *
+ * Lo unico intocable es el suelo del mundo (LEDGE, que ademas lleva el
+ * sumidero) y los cuerpos de otras piezas, que se reescriben solos cada paso.
  */
 export class Bomb implements Gadget {
   readonly kind = 'bomb';
@@ -115,7 +131,23 @@ export class Bomb implements Gadget {
         if (d2 > r2) continue;
 
         const i = g.idx(x, y);
-        if (g.mat[i] !== SAND) continue;
+        const m = g.mat[i]!;
+
+        // Las paredes del usuario tambien vuelan. Solo las suyas: LEDGE es el
+        // suelo del mundo y el sumidero del fondo, y DYN o las cintas son
+        // cuerpos de otras piezas que se reescriben solos cada paso.
+        if (m === WALL) {
+          // El borde se deshilacha en vez de cortar en circunferencia perfecta.
+          // Un agujero de compas en mitad de un trazo a mano se lee como un
+          // recorte, no como una explosion.
+          const d = Math.sqrt(d2);
+          if (d < BLAST_R * RUBBLE_CORE || rand() < 1 - (d / BLAST_R - RUBBLE_CORE) / (1 - RUBBLE_CORE)) {
+            g.removeAt(i);
+          }
+          continue;
+        }
+
+        if (m !== SAND) continue;
         // Si no cabe una particula mas, el grano se queda donde esta. Sacarlo
         // del grid sin poder lanzarlo seria destruirlo, y una explosion mueve
         // material, no lo hace desaparecer.

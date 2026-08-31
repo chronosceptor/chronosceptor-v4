@@ -60,14 +60,16 @@ Y una excepción, solo para la bomba: **tocarla la detona** sin esperar a la mec
 |---|---|
 | **Cruz giratoria** | Cuatro aspas que giran y avientan la arena hacia el lado del giro |
 | **Plataforma** | Patrulla de izquierda a derecha **llevándose encima** lo que le caiga |
-| **Bomba** | Mecha de 2 s con un anillo que se vacía; revienta un radio de 42 celdas y se consume |
+| **Bomba** | Mecha de 2 s con un anillo que se vacía; revienta un radio de 42 celdas —arena **y paredes**— y se consume |
 | **Fuente** | Un segundo chorro, con su propio color dominante de la paleta |
 
 Las piezas van con tamaño y velocidad fijos: no hay ajustes ni panel, igual que no hay selector de
 brocha. Caben diez a la vez; al llegar al tope las fichas del dock se atenúan.
 
-La bomba no borra tus paredes. El dibujo es el trabajo de quien está jugando, y una pieza que lo
-barriera de golpe sería un castigo y no un juguete.
+La bomba **sí se lleva por delante tus paredes**: abre un boquete en el trazo y lo que estuviera
+aguantando encima se desploma por él. Lo único intocable es el suelo del mundo —la última fila, que
+lleva el sumidero— y los cuerpos de las demás piezas. El aro punteado que se ve durante la mecha
+marca exactamente hasta dónde va a llegar.
 
 El fondo tiene un **drenaje con nivel de guarda**: no drena nada hasta que el lienzo se llena casi
 del todo, y entonces abre una boca ancha en el centro y descarga hasta la mitad. Así el ciclo es un
@@ -242,6 +244,14 @@ Cosas que parecen arbitrarias en el código y no lo son:
 - **A la papelera se le pregunta antes de soltarla.** `isTrash` exige que el dock esté en modo
   papelera y `onRelease` es justo lo que le quita ese modo, así que llamándolo primero la pregunta
   salía siempre que no y tirar una pieza al dock no borraba nada.
+- **El borde del boquete que abre la bomba se deshilacha.** Dentro del 72% del radio la pared se va
+  siempre; a partir de ahí la probabilidad cae hasta cero justo en el borde. Con un corte limpio a
+  radio fijo, lo que aparece en medio de un trazo hecho a mano se lee como un recorte de compás y no
+  como una explosión.
+- **La bomba destruye paredes en el mismo radio en que lanza la arena.** Se pensó en hacer el radio
+  de la estructura más corto —las paredes son más recias—, pero entonces el aro punteado del alcance
+  estaría mintiendo, que es exactamente por lo que la cruz perdió su llanta dibujada. El aro
+  significa "todo lo de aquí dentro se va", y tiene que ser verdad.
 
 ## Historia
 
