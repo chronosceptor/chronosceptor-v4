@@ -4,7 +4,7 @@ import { grainColor, type Palette } from './palette';
 import { mulberry32, randFloat, randInt, type Rng } from './rng';
 
 /** Filas del borde inferior reservadas al drenaje: no se puede dibujar en ellas. */
-export const RESERVED_ROWS = 2;
+export const RESERVED_ROWS = 3;
 
 export interface Profile {
   name: 'desktop' | 'portrait';
@@ -20,22 +20,40 @@ export interface Profile {
   rate: number;
   /** Radio de la brocha, en celdas. */
   brush: number;
+  /**
+   * Semiancho de la boquilla, en celdas.
+   *
+   * Es el techo real del caudal, no `rate`: la fuente solo puede sembrar en las
+   * celdas libres de las dos primeras filas, asi que una boquilla estrecha
+   * rechaza todo lo que no cabe por mucho que se suba `rate`. Con tres celdas
+   * el maximo eran ~180 granos/s aunque se pidieran 520.
+   */
+  nozzle: number;
   /** Tope de arena viva, como red de seguridad de rendimiento. */
   maxSand: number;
   /** Fraccion del lienzo que se deja llenar antes de que el fondo empiece a drenar. */
   fillFrac: number;
+  /**
+   * Ancho de la boca de descarga, en celdas.
+   *
+   * Manda sobre la forma del vaciado: una boca estrecha abre un pozo vertical
+   * que solo se lleva la columna del centro y deja los lados intactos; una
+   * ancha hunde la superficie en V y arrastra material de todo el monton, que
+   * es lo que revuelve los estratos de unas canciones con otras.
+   */
+  mouth: number;
 }
 
 export function profileFor(cssW: number, cssH: number): Profile {
   const portrait = cssH > cssW || cssW < 720;
   if (portrait) {
     // Algo mas ancha en tactil: el dedo es menos preciso que el raton.
-    return { name: 'portrait', cell: 4, rate: 170, brush: 1.5, maxSand: 26000, fillFrac: 0.3 };
+    return { name: 'portrait', cell: 4, rate: 400, brush: 1.5, nozzle: 3, maxSand: 46000, fillFrac: 0.72, mouth: 34 };
   }
   // Brocha fina: un trazo de una sola celda de grosor ya retiene el material
   // (la regla diagonal exige que la celda lateral tambien este libre), asi que
   // no hay razon fisica para engordarla y con ella se dibuja con precision.
-  return { name: 'desktop', cell: cssW > 2400 ? 4 : 3, rate: 280, brush: 1.0, maxSand: 70000, fillFrac: 0.3 };
+  return { name: 'desktop', cell: cssW > 2400 ? 4 : 3, rate: 700, brush: 1.0, nozzle: 4, maxSand: 135000, fillFrac: 0.72, mouth: 76 };
 }
 
 /**
@@ -49,6 +67,8 @@ export class Source {
   private acc = 0;
   private dominant = 0;
   private colorTimer = 0;
+  /** Segundos seguidos queriendo emitir sin conseguir colocar un solo grano. */
+  private blockedFor = 0;
 
   constructor(
     readonly x: number,
@@ -77,14 +97,20 @@ export class Source {
     this.acc -= n;
     if (n > budget) n = budget;
 
+    let placed = 0;
     for (let k = 0; k < n; k++) {
       const x = this.x + randInt(rand, -this.halfWidth, this.halfWidth);
       // Se siembra en las dos primeras filas: con una sola, los granos que no
       // caben se pierden y el chorro sale entrecortado.
-      if (!g.addSand(x, 0, grainColor(palette, rand, this.dominant, 0.94))) {
-        g.addSand(x, 1, grainColor(palette, rand, this.dominant, 0.94));
-      }
+      if (g.addSand(x, 0, grainColor(palette, rand, this.dominant, 0.94))) placed++;
+      else if (g.addSand(x, 1, grainColor(palette, rand, this.dominant, 0.94))) placed++;
     }
+    this.blockedFor = placed === 0 ? this.blockedFor + dt : 0;
+  }
+
+  /** La boquilla lleva un rato sepultada y no consigue soltar nada. */
+  get blocked(): boolean {
+    return this.blockedFor > 2;
   }
 }
 
@@ -95,18 +121,19 @@ export interface World {
   profile: Profile;
 }
 
-export function createWorld(cssW: number, cssH: number): World {
+export function createWorld(cssW: number, cssH: number, fillOverride?: number): World {
   const profile = profileFor(cssW, cssH);
+  if (fillOverride !== undefined) profile.fillFrac = fillOverride;
   const w = Math.max(80, Math.floor(cssW / profile.cell));
   const h = Math.max(80, Math.floor(cssH / profile.cell));
   const grid = new Grid(w, h);
   const high = Math.round(w * h * profile.fillFrac);
-  const drain = new Drain(high, Math.round(high * 0.92));
+  const drain = new Drain(profile.mouth, high, Math.round(high * 0.5));
   drain.reset(grid);
 
   const source = new Source(
     w >> 1,
-    Math.max(1, Math.round(profile.brush * 0.6)),
+    profile.nozzle,
     profile.rate,
     26,
     mulberry32((Date.now() ^ 0x9e3779b9) >>> 0),
@@ -115,8 +142,7 @@ export function createWorld(cssW: number, cssH: number): World {
   return { grid, source, drain, profile };
 }
 
-/** Troneras abiertas cuando el drenaje actua. */
-const DRAIN_PORTS = 6;
+
 
 /**
  * Drenaje del fondo con nivel de guarda.
@@ -129,23 +155,56 @@ const DRAIN_PORTS = 6;
  * acumularse: lo que no atrape el dibujo desaparece al tocar el fondo y la
  * pantalla se queda perpetuamente vacia.
  *
- * Las troneras son pocas a proposito. Abriendo la fila completa el vaciado va
- * miles de granos por segundo y el nivel cae de golpe, que se ve como un
- * bombeo; con seis, el caudal queda apenas por encima del de la fuente y el
- * nivel baja despacio, sin que se note.
+ * La boca es una sola y va en el centro, como la de un silo: al abrirse, la
+ * superficie se hunde en cono invertido y los lados resbalan hacia dentro.
+ * Es el flujo en embudo de un silo de verdad, y se ve mucho mejor que varias
+ * troneras repartidas, que abren chimeneas sueltas por todo el fondo.
+ *
+ * El sumidero va SOLO en la ultima fila, nunca repartido en altura.
+ *
+ * Se probo estampandolo en V, ocupando varias filas, para forzar la forma de
+ * embudo: el resultado es que el material se consume en el aire, a la altura a
+ * la que toca el borde del embudo, y en pantalla aparecen huecos negros de la
+ * nada sin que nada llegue a caer hasta abajo. Lo que se ve tiene que salir por
+ * el borde del mundo, no evaporarse a media altura.
+ *
+ * La forma de embudo sale sola de la fisica: con una boca ancha, la superficie
+ * se hunde en cono y los lados resbalan hacia el centro. El ancho manda sobre
+ * esa forma —una boca estrecha abre un pozo de paredes casi verticales que solo
+ * se lleva la columna del centro; una ancha hunde el monton entero y revuelve
+ * los estratos de unas canciones con otras.
  */
 export class Drain {
   private open = false;
 
   constructor(
-    /** Nivel al que se abre. */
+    /** Ancho de la boca, en celdas. */
+    private readonly mouth: number,
+    /** Nivel al que se abre: el lienzo lleno. */
     private readonly high: number,
-    /** Nivel al que se vuelve a cerrar. La histeresis evita el parpadeo. */
+    /**
+     * Nivel al que se vuelve a cerrar.
+     *
+     * Se vacia hasta la mitad, no hasta un pelo por debajo del tope. Asi el
+     * ciclo es un suceso con principio y final —llenarse, descargar, volver a
+     * llenarse— y cada vuelta trae los colores de otra cancion, que es lo que
+     * hace que se vayan combinando en capas.
+     */
     private readonly low: number,
   ) {}
 
-  tick(g: Grid): void {
-    const should = this.open ? g.sandCount > this.low : g.sandCount > this.high;
+  /**
+   * `sourceBlocked` abre el drenaje aunque no se haya llegado al nivel.
+   *
+   * Sin esa salida, si el monton crece hasta sepultar la fuente antes de
+   * alcanzar el tope, la fuente deja de emitir, el nivel no vuelve a subir y el
+   * drenaje no abre nunca: el lienzo se queda lleno para siempre. Cuanto mas
+   * alto se pone el nivel de llenado, mas facil es caer en eso.
+   */
+  tick(g: Grid, sourceBlocked = false): void {
+    const should = this.open
+      ? g.sandCount > this.low
+      : g.sandCount > this.high || sourceBlocked;
     if (should === this.open) return;
     this.open = should;
     this.write(g);
@@ -161,11 +220,9 @@ export class Drain {
     const y = g.h - 1;
     g.fillRect(0, y, g.w - 1, y, LEDGE);
     if (this.open) {
-      const stride = g.w / DRAIN_PORTS;
-      for (let k = 0; k < DRAIN_PORTS; k++) {
-        const x = Math.min(g.w - 1, Math.round(stride * (k + 0.5)));
-        g.stamp(x, y, SINK);
-      }
+      const half = Math.max(1, this.mouth >> 1);
+      const cx = g.w >> 1;
+      g.fillRect(Math.max(0, cx - half), y, Math.min(g.w - 1, cx + half), y, SINK);
     }
     g.wakeRect(0, y - 2, g.w - 1, y);
   }

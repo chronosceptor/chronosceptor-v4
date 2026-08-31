@@ -10,8 +10,11 @@ export interface BootOptions {
   sandCanvas: HTMLCanvasElement;
   fxCanvas: HTMLCanvasElement;
   debug?: boolean;
-  /** Se llama en el primer trazo, para retirar la pista inicial. */
-  onFirstStroke?: () => void;
+  /**
+   * Sobreescribe la fraccion de llenado a la que dispara el drenaje.
+   * Bajarla acorta muchisimo el ciclo y hace practicable probar la descarga.
+   */
+  fillFrac?: number;
 }
 
 export interface SandApp {
@@ -21,7 +24,7 @@ export interface SandApp {
   /** Vacia el lienzo. */
   clear(): void;
   readonly palette: Palette;
-  inspect(): { sand: number; walls: number; fps: number; grid: string };
+  inspect(): { sand: number; walls: number; fps: number; grid: string; msSim: number; msRender: number; despiertas: number };
   /** Vuelca los materiales de una region como texto. Depuracion pura. */
   dump(x0: number, y0: number, w: number, h: number): string[];
 }
@@ -54,6 +57,9 @@ export function boot(opts: BootOptions): SandApp {
   /** Baja a 30 Hz de simulacion si el equipo no da los 60. */
   let simDivider = 1;
   let disposed = false;
+  /** Coste medido por frame, para saber si queda margen de verdad. */
+  let msSim = 0;
+  let msRender = 0;
 
   // --- Construccion -------------------------------------------------------
 
@@ -62,7 +68,7 @@ export function boot(opts: BootOptions): SandApp {
     const cssH = container.clientHeight || window.innerHeight;
 
     input?.destroy();
-    world = createWorld(cssW, cssH);
+    world = createWorld(cssW, cssH, opts.fillFrac);
     if (previous) transferDrawing(previous.grid, world.grid);
 
     renderer = new Renderer(sandCanvas, fxCanvas, world.grid);
@@ -78,7 +84,6 @@ export function boot(opts: BootOptions): SandApp {
       hasWall: (c) => hasWallNear(world.grid, c.x, c.y, world.profile.brush),
       paint: (from, to, erase) =>
         paintStroke(world.grid, from, to, world.profile.brush, erase),
-      onFirstStroke: () => opts.onFirstStroke?.(),
     });
   }
 
@@ -86,7 +91,7 @@ export function boot(opts: BootOptions): SandApp {
 
   function simulate(dt: number): void {
     const { grid, source, drain, profile } = world;
-    drain.tick(grid);
+    drain.tick(grid, source.blocked);
 
     if (shift > 0) {
       shift -= dt;
@@ -126,6 +131,7 @@ export function boot(opts: BootOptions): SandApp {
       `${profile.name}  ${grid.w}x${grid.h}  celda ${profile.cell}px`,
       `fps ${fps.toFixed(0)}  sim ${SIM_HZ / simDivider}Hz`,
       `arena ${grid.sandCount}  paredes ${countWalls()}`,
+      `sim ${msSim.toFixed(1)}ms  pintado ${msRender.toFixed(1)}ms`,
       `brocha ${profile.brush}  modo ${input?.mode ?? '-'}`,
     ];
     ctx.save();
@@ -151,14 +157,18 @@ export function boot(opts: BootOptions): SandApp {
     acc += dt;
     let steps = 0;
     const budget = SIM_DT * simDivider;
+    const tSim = performance.now();
     while (acc >= budget && steps < 3) {
       simulate(budget);
       acc -= budget;
       steps++;
     }
     if (steps === 3) acc = 0; // no acumular deuda que nunca se paga
+    if (steps > 0) msSim += (performance.now() - tSim - msSim) * 0.1;
 
+    const tRender = performance.now();
     render();
+    msRender += (performance.now() - tRender - msRender) * 0.1;
 
     const cost = performance.now() - t0;
     if (cost > 20) slowFrames++;
@@ -212,11 +222,17 @@ export function boot(opts: BootOptions): SandApp {
       return pending ?? palette;
     },
     inspect() {
+      const { awake, size } = world.grid;
+      let despiertas = 0;
+      for (let i = 0; i < size; i++) despiertas += awake[i]!;
       return {
         sand: world.grid.sandCount,
         walls: countWalls(),
         fps: Math.round(fps),
         grid: `${world.grid.w}x${world.grid.h}`,
+        msSim: +msSim.toFixed(2),
+        msRender: +msRender.toFixed(2),
+        despiertas,
       };
     },
     dump(x0: number, y0: number, w: number, h: number): string[] {

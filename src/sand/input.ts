@@ -9,8 +9,6 @@ export interface InputHooks {
   hasWall(cell: Point): boolean;
   /** Pinta el segmento entre dos celdas. */
   paint(from: Point, to: Point, erase: boolean): void;
-  /** Primer trazo de la sesion: sirve para retirar la pista inicial. */
-  onFirstStroke(): void;
 }
 
 /**
@@ -28,7 +26,6 @@ export class Input {
   mode: StrokeMode = 'draw';
 
   private last: Point | null = null;
-  private drew = false;
   private readonly handlers: Array<[string, EventListener]> = [];
 
   constructor(
@@ -82,10 +79,6 @@ export class Input {
     }
 
     this.hooks.paint(cell, cell, this.mode === 'erase');
-    if (!this.drew) {
-      this.drew = true;
-      this.hooks.onFirstStroke();
-    }
   }
 
   private move(e: PointerEvent): void {

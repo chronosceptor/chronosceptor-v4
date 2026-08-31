@@ -19,8 +19,6 @@ import NowPlaying from '../components/NowPlaying.astro';
     <SandCanvas />
     <NowPlaying />
 
-    <p id="pista">Draw to divert the sand</p>
-    <button id="limpiar" type="button">Clear</button>
   </body>
 </html>
 
@@ -41,59 +39,6 @@ import NowPlaying from '../components/NowPlaying.astro';
   }
 </style>
 
-<style>
-  /* Pista de primera vez: un lienzo negro con un hilo de arena no comunica por
-     si solo que se puede dibujar. Se retira con el primer trazo. */
-  #pista {
-    position: fixed;
-    left: 50%;
-    top: 58%;
-    transform: translateX(-50%);
-    margin: 0;
-    z-index: 2;
-    pointer-events: none;
-    color: #6e6e78;
-    font: 400 10px/1 ui-sans-serif, system-ui, sans-serif;
-    text-transform: uppercase;
-    letter-spacing: 0.22em;
-    transition: opacity 600ms ease;
-  }
-
-  #limpiar {
-    position: fixed;
-    right: clamp(18px, 5vw, 72px);
-    bottom: clamp(18px, 4.5vh, 40px);
-    z-index: 2;
-    padding: 8px 14px;
-    border: 1px solid #2f2f38;
-    background: transparent;
-    color: #75757f;
-    font: 400 10px/1 ui-sans-serif, system-ui, sans-serif;
-    text-transform: uppercase;
-    letter-spacing: 0.16em;
-    cursor: pointer;
-    transition:
-      color 200ms ease,
-      border-color 200ms ease;
-  }
-
-  #limpiar:hover,
-  #limpiar:focus-visible {
-    color: #ececf2;
-    border-color: #55555f;
-  }
-
-  #pista.oculto {
-    opacity: 0;
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    #pista,
-    #limpiar {
-      transition: none;
-    }
-  }
-</style>
 
 <script>
   import { boot } from '../sand';
@@ -105,23 +50,17 @@ import NowPlaying from '../components/NowPlaying.astro';
   /** `?mock` sirve un track fijo: permite afinar el color sin API key. */
   const mock = params.has('mock');
 
-  const pista = document.getElementById('pista') as HTMLElement;
-
   const app = boot({
     sandCanvas: document.getElementById('arena') as HTMLCanvasElement,
     fxCanvas: document.getElementById('fx') as HTMLCanvasElement,
     debug: params.has('debug'),
-    onFirstStroke: () => pista.classList.add('oculto'),
+    // `?fill=0.2` dispara el drenaje mucho antes: sirve para probar la descarga
+    // sin esperar el ciclo completo.
+    fillFrac: params.has('fill') ? Number(params.get('fill')) : undefined,
   });
 
-  // Para trastear desde la consola mientras se afina.
+  // Para trastear desde la consola: `fabrica.clear()` vacia el lienzo.
   (window as any).fabrica = app;
-
-  const limpiar = document.getElementById('limpiar') as HTMLButtonElement;
-  limpiar.addEventListener('click', () => {
-    app.clear();
-    limpiar.blur();
-  });
 
   // --- Tarjeta de "sonando ahora" ------------------------------------------
 

@@ -40,10 +40,10 @@ Sin esas variables funciona igual, con la paleta ocre por defecto.
 El mismo gesto funciona con dedo y con ratón: no hace falta ningún selector de herramienta ni gestos
 que haya que aprender.
 
-El fondo tiene un **drenaje con nivel de guarda**: no drena nada hasta que el lienzo se llena hasta
-cerca de un tercio de su superficie (unos 4 minutos), y a partir de ahí abre seis troneras, las
-justas para mantener el nivel. Así la arena se acumula de verdad y da tiempo a ver mezclarse los
-colores de varias canciones antes de que nada desaparezca.
+El fondo tiene un **drenaje con nivel de guarda**: no drena nada hasta que el lienzo se llena casi
+del todo, y entonces abre una boca ancha en el centro y descarga hasta la mitad. Así el ciclo es un
+suceso —llenarse, descargar, volver a llenarse— y cada vuelta trae los colores de otra canción, que
+es lo que hace que se vayan combinando en capas.
 
 Sí puede inundarse si dibujas una presa que cruce toda la pantalla — es física honesta, y para eso
 está `Clear`. Las dos últimas filas están reservadas: no se puede dibujar sobre el drenaje.
@@ -56,6 +56,7 @@ El dibujo no se guarda: cada visita empieza en blanco.
 |---|---|
 | `?debug=1` | Superpone fps, conteo de arena y paredes, tamaño de grid y modo de brocha |
 | `?mock=1` | Sirve una canción fija con portada local: permite afinar la extracción de color sin API key |
+| `?fill=0.2` | Baja el nivel al que dispara el drenaje. Sin esto, probar la descarga son varios minutos por ciclo |
 
 Desde la consola: `fabrica.inspect()` (arena, paredes, fps, grid), `fabrica.dump(x, y, w, h)`
 (vuelca los materiales de una región como texto) y `fabrica.clear()`.
@@ -115,12 +116,23 @@ Cosas que parecen arbitrarias en el código y no lo son:
 - **El desplazamiento de un grano barrido sigue la dirección de la pieza que lo empuja.** Una lista
   fija de huecos que mire a la izquierda antes que a la derecha haría que toda pieza en movimiento
   expulsara el material siempre hacia el mismo lado.
-- **El drenaje del fondo solo actúa por encima de un nivel de guarda, y con pocas troneras.** Con la
-  fila entera consumiendo siempre, lo que no atrapa el dibujo desaparece al tocar el fondo y la
-  pantalla se queda perpetuamente vacía: no da tiempo a ver mezclarse los colores de dos canciones.
-  Y abriendo la fila completa al llegar al nivel, el vaciado va a miles de granos por segundo y el
-  nivel cae de golpe, que se ve como un bombeo; con seis troneras el caudal queda apenas por encima
-  del de la fuente y el nivel baja despacio. La histéresis (cierra al 92%) evita el parpadeo.
+- **El drenaje solo actúa por encima de un nivel de guarda.** Con la fila entera consumiendo
+  siempre, lo que no atrapa el dibujo desaparece al tocar el fondo y la pantalla se queda
+  perpetuamente vacía: no da tiempo a ver mezclarse los colores de dos canciones.
+- **El sumidero va solo en la última fila, nunca repartido en altura.** Se probó estampándolo en V
+  sobre varias filas para forzar la forma de embudo: el material se consume en el aire, a la altura
+  a la que toca el borde, y aparecen huecos negros de la nada sin que nada llegue a caer hasta
+  abajo. Lo que se ve tiene que salir por el borde del mundo, no evaporarse a media altura.
+- **El techo real del caudal es el ancho de la boquilla, no `rate`.** La fuente solo puede sembrar
+  en las celdas libres de las dos primeras filas, así que una boquilla estrecha rechaza todo lo que
+  no cabe: con tres celdas el máximo eran ~180 granos/s aunque se pidieran 520.
+- **El drenaje también abre si la fuente queda sepultada.** Sin esa salida, si el montón crece hasta
+  tapar la boquilla antes de alcanzar el nivel de disparo, deja de emitir, el nivel no vuelve a
+  subir y el drenaje no abre nunca: el lienzo se queda lleno para siempre.
+- **Llenar la pantalla no es un problema de rendimiento.** Medido: con 90.000 granos la simulación
+  cuesta 1,4 ms por frame de un presupuesto de 16,7. Las celdas despiertas se mantienen planas sin
+  importar cuánta arena haya, porque los granos asentados se duermen: el coste va con la arena en
+  movimiento, no con la total.
 - **Vale el último scrobble reciente, no solo la señal "now playing".** Muchos reproductores nunca
   mandan esa señal y solo scrobblean la canción al terminarla; mirando únicamente `nowplaying` la
   página se queda en la paleta por defecto aunque haya música sonando, que es indistinguible de

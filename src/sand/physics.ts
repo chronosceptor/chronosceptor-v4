@@ -14,11 +14,15 @@ const CHUTE_STEPS = 3;
 /** Probabilidad de que un grano atraviese una criba en un frame dado. */
 const SIEVE_P = 0.06;
 /**
- * Probabilidad de deslizamiento lateral. Solo con las diagonales el talud queda
- * clavado en 45°, que se ve rígido; este arrastre lo tiende hacia ~33°, que es
- * el ángulo de reposo real de la arena.
+ * Probabilidad de deslizamiento lateral hacia un desnivel cercano.
+ *
+ * Solo con las diagonales el talud queda clavado en 45°. Este arrastre lo
+ * tiende: cuanto mas alto, mas se extiende el material y mas plano queda el
+ * monton. Es la palanca que decide cuanta pantalla llega a cubrirse — con una
+ * fuente central, un talud empinado forma un cono que por geometria no puede
+ * alcanzar las esquinas por mucha arena que se le eche.
  */
-const CREEP_P = 0.35;
+const CREEP_P = 0.8;
 /**
  * Capas de arena por encima de la banda que esta sigue arrastrando.
  *
