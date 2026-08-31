@@ -7,6 +7,16 @@ versionado según [SemVer](https://semver.org/lang/es/).
 
 ### Added
 
+### Changed
+
+### Fixed
+
+### Security
+
+## [0.1.0] - 2026-08-31
+
+### Added
+
 - Lienzo de física a pantalla completa: cae arena desde el centro superior y se dibujan
   paredes con el ratón o el dedo para desviarla. Una sola materia sólida; la mecánica
   emerge de la forma que se dibuja.
