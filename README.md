@@ -40,9 +40,13 @@ Sin esas variables funciona igual, con la paleta ocre por defecto.
 El mismo gesto funciona con dedo y con ratón: no hace falta ningún selector de herramienta ni gestos
 que haya que aprender.
 
-La arena desaparece al salir por el borde inferior, así que el mundo nunca se inunda solo. Sí puede
-inundarse si dibujas una presa que cruce toda la pantalla — es física honesta, y para eso está
-`Clear`. Las dos últimas filas están reservadas: no se puede dibujar sobre el drenaje.
+El fondo tiene un **drenaje con nivel de guarda**: no drena nada hasta que el lienzo se llena hasta
+cerca de un tercio de su superficie (unos 4 minutos), y a partir de ahí abre seis troneras, las
+justas para mantener el nivel. Así la arena se acumula de verdad y da tiempo a ver mezclarse los
+colores de varias canciones antes de que nada desaparezca.
+
+Sí puede inundarse si dibujas una presa que cruce toda la pantalla — es física honesta, y para eso
+está `Clear`. Las dos últimas filas están reservadas: no se puede dibujar sobre el drenaje.
 
 El dibujo no se guarda: cada visita empieza en blanco.
 
@@ -111,6 +115,12 @@ Cosas que parecen arbitrarias en el código y no lo son:
 - **El desplazamiento de un grano barrido sigue la dirección de la pieza que lo empuja.** Una lista
   fija de huecos que mire a la izquierda antes que a la derecha haría que toda pieza en movimiento
   expulsara el material siempre hacia el mismo lado.
+- **El drenaje del fondo solo actúa por encima de un nivel de guarda, y con pocas troneras.** Con la
+  fila entera consumiendo siempre, lo que no atrapa el dibujo desaparece al tocar el fondo y la
+  pantalla se queda perpetuamente vacía: no da tiempo a ver mezclarse los colores de dos canciones.
+  Y abriendo la fila completa al llegar al nivel, el vaciado va a miles de granos por segundo y el
+  nivel cae de golpe, que se ve como un bombeo; con seis troneras el caudal queda apenas por encima
+  del de la fuente y el nivel baja despacio. La histéresis (cierra al 92%) evita el parpadeo.
 - **Vale el último scrobble reciente, no solo la señal "now playing".** Muchos reproductores nunca
   mandan esa señal y solo scrobblean la canción al terminarla; mirando únicamente `nowplaying` la
   página se queda en la paleta por defecto aunque haya música sonando, que es indistinguible de

@@ -1,5 +1,5 @@
 import { Grid } from './grid';
-import { EMPTY, SAND, SINK, WALL } from './materials';
+import { EMPTY, LEDGE, SAND, SINK, WALL } from './materials';
 import { grainColor, type Palette } from './palette';
 import { mulberry32, randFloat, randInt, type Rng } from './rng';
 
@@ -22,18 +22,20 @@ export interface Profile {
   brush: number;
   /** Tope de arena viva, como red de seguridad de rendimiento. */
   maxSand: number;
+  /** Fraccion del lienzo que se deja llenar antes de que el fondo empiece a drenar. */
+  fillFrac: number;
 }
 
 export function profileFor(cssW: number, cssH: number): Profile {
   const portrait = cssH > cssW || cssW < 720;
   if (portrait) {
     // Algo mas ancha en tactil: el dedo es menos preciso que el raton.
-    return { name: 'portrait', cell: 4, rate: 170, brush: 1.5, maxSand: 26000 };
+    return { name: 'portrait', cell: 4, rate: 170, brush: 1.5, maxSand: 26000, fillFrac: 0.3 };
   }
   // Brocha fina: un trazo de una sola celda de grosor ya retiene el material
   // (la regla diagonal exige que la celda lateral tambien este libre), asi que
   // no hay razon fisica para engordarla y con ella se dibuja con precision.
-  return { name: 'desktop', cell: cssW > 2400 ? 4 : 3, rate: 280, brush: 1.0, maxSand: 60000 };
+  return { name: 'desktop', cell: cssW > 2400 ? 4 : 3, rate: 280, brush: 1.0, maxSand: 70000, fillFrac: 0.3 };
 }
 
 /**
@@ -89,6 +91,7 @@ export class Source {
 export interface World {
   grid: Grid;
   source: Source;
+  drain: Drain;
   profile: Profile;
 }
 
@@ -97,7 +100,9 @@ export function createWorld(cssW: number, cssH: number): World {
   const w = Math.max(80, Math.floor(cssW / profile.cell));
   const h = Math.max(80, Math.floor(cssH / profile.cell));
   const grid = new Grid(w, h);
-  stampDrain(grid);
+  const high = Math.round(w * h * profile.fillFrac);
+  const drain = new Drain(high, Math.round(high * 0.92));
+  drain.reset(grid);
 
   const source = new Source(
     w >> 1,
@@ -107,18 +112,63 @@ export function createWorld(cssW: number, cssH: number): World {
     mulberry32((Date.now() ^ 0x9e3779b9) >>> 0),
   );
 
-  return { grid, source, profile };
+  return { grid, source, drain, profile };
 }
 
+/** Troneras abiertas cuando el drenaje actua. */
+const DRAIN_PORTS = 6;
+
 /**
- * Drenaje del fondo: la ultima fila consume la arena que la toca.
+ * Drenaje del fondo con nivel de guarda.
  *
- * No se dibuja nada: el material simplemente sale del mundo por abajo. Sin
- * esto, todo lo que cae se acumula y el lienzo acaba inundado, que en un
- * juguete de dibujo es un estado del que no se vuelve.
+ * Cerrado, la ultima fila es suelo y el material se acumula: el lienzo se llena
+ * de verdad. Solo al pasar de cierto nivel se abren unas pocas troneras, las
+ * justas para mantenerlo ahi y que nunca se inunde del todo.
+ *
+ * Con la fila entera consumiendo siempre —que era como estaba— nada llega a
+ * acumularse: lo que no atrape el dibujo desaparece al tocar el fondo y la
+ * pantalla se queda perpetuamente vacia.
+ *
+ * Las troneras son pocas a proposito. Abriendo la fila completa el vaciado va
+ * miles de granos por segundo y el nivel cae de golpe, que se ve como un
+ * bombeo; con seis, el caudal queda apenas por encima del de la fuente y el
+ * nivel baja despacio, sin que se note.
  */
-export function stampDrain(g: Grid): void {
-  g.fillRect(0, g.h - 1, g.w - 1, g.h - 1, SINK);
+export class Drain {
+  private open = false;
+
+  constructor(
+    /** Nivel al que se abre. */
+    private readonly high: number,
+    /** Nivel al que se vuelve a cerrar. La histeresis evita el parpadeo. */
+    private readonly low: number,
+  ) {}
+
+  tick(g: Grid): void {
+    const should = this.open ? g.sandCount > this.low : g.sandCount > this.high;
+    if (should === this.open) return;
+    this.open = should;
+    this.write(g);
+  }
+
+  /** Cierra el drenaje y lo reescribe. Lo usa el vaciado del lienzo. */
+  reset(g: Grid): void {
+    this.open = false;
+    this.write(g);
+  }
+
+  private write(g: Grid): void {
+    const y = g.h - 1;
+    g.fillRect(0, y, g.w - 1, y, LEDGE);
+    if (this.open) {
+      const stride = g.w / DRAIN_PORTS;
+      for (let k = 0; k < DRAIN_PORTS; k++) {
+        const x = Math.min(g.w - 1, Math.round(stride * (k + 0.5)));
+        g.stamp(x, y, SINK);
+      }
+    }
+    g.wakeRect(0, y - 2, g.w - 1, y);
+  }
 }
 
 /** ¿Se puede dibujar en esta fila? Las reservadas protegen el drenaje. */
@@ -126,8 +176,8 @@ export function isDrawable(g: Grid, y: number): boolean {
   return y >= 0 && y < g.h - RESERVED_ROWS;
 }
 
-/** Vacia el lienzo: quita paredes y material, deja el drenaje. */
-export function clearWorld(g: Grid): void {
+/** Vacia el lienzo: quita paredes y material, deja el drenaje cerrado. */
+export function clearWorld(g: Grid, drain: Drain): void {
   const { mat, col, vel, awake, size } = g;
   for (let i = 0; i < size; i++) {
     if (mat[i] === WALL || mat[i] === SAND) {
@@ -138,7 +188,7 @@ export function clearWorld(g: Grid): void {
     awake[i] = 1;
   }
   g.sandCount = 0;
-  stampDrain(g);
+  drain.reset(g);
 }
 
 /**
@@ -158,5 +208,4 @@ export function transferDrawing(from: Grid, to: Grid): void {
       to.mat[to.idx(x, y)] = WALL;
     }
   }
-  stampDrain(to);
 }

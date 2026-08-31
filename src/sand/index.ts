@@ -85,7 +85,8 @@ export function boot(opts: BootOptions): SandApp {
   // --- Bucle --------------------------------------------------------------
 
   function simulate(dt: number): void {
-    const { grid, source, profile } = world;
+    const { grid, source, drain, profile } = world;
+    drain.tick(grid);
 
     if (shift > 0) {
       shift -= dt;
@@ -205,7 +206,7 @@ export function boot(opts: BootOptions): SandApp {
       shift = SHIFT_PAUSE;
     },
     clear(): void {
-      clearWorld(world.grid);
+      clearWorld(world.grid, world.drain);
     },
     get palette(): Palette {
       return pending ?? palette;
