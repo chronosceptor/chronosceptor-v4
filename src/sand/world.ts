@@ -28,12 +28,12 @@ export function profileFor(cssW: number, cssH: number): Profile {
   const portrait = cssH > cssW || cssW < 720;
   if (portrait) {
     // Algo mas ancha en tactil: el dedo es menos preciso que el raton.
-    return { name: 'portrait', cell: 4, rate: 170, brush: 2, maxSand: 26000 };
+    return { name: 'portrait', cell: 4, rate: 170, brush: 1.5, maxSand: 26000 };
   }
   // Brocha fina: un trazo de una sola celda de grosor ya retiene el material
   // (la regla diagonal exige que la celda lateral tambien este libre), asi que
   // no hay razon fisica para engordarla y con ella se dibuja con precision.
-  return { name: 'desktop', cell: cssW > 2400 ? 4 : 3, rate: 280, brush: 1.6, maxSand: 60000 };
+  return { name: 'desktop', cell: cssW > 2400 ? 4 : 3, rate: 280, brush: 1.0, maxSand: 60000 };
 }
 
 /**

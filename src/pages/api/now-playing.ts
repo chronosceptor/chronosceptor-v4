@@ -6,10 +6,26 @@ const LASTFM = 'https://ws.audioscrobbler.com/2.0/';
 /** Prefijo del CDN de portadas de Last.fm. */
 const ART_PREFIX = '/i/u/';
 
+/**
+ * Minutos desde el ultimo scrobble a partir de los cuales se considera que ya
+ * no se esta escuchando nada.
+ *
+ * Hace falta porque no todos los reproductores mandan la senal "now playing":
+ * varios solo scrobblean la cancion al terminarla. Mirando unicamente esa senal
+ * la pagina se queda en la paleta por defecto aunque haya musica sonando, que
+ * es indistinguible de estar rota.
+ */
+const STALE_MINUTES = 25;
+
 export interface NowPlaying {
+  /** true solo si Last.fm marca la cancion como en curso. */
   playing: boolean;
   /** false cuando faltan las variables de entorno: la UI puede avisar en dev. */
   configured: boolean;
+  /** El ultimo scrobble es lo bastante viejo como para no contarlo. */
+  stale?: boolean;
+  /** Segundos unix del scrobble, cuando no es en vivo. */
+  playedAt?: number;
   artist?: string;
   title?: string;
   album?: string;
@@ -86,11 +102,17 @@ export const GET: APIRoute = async ({ url }) => {
     if (!track) return json({ playing: false, configured: true });
 
     const playing = track['@attr']?.nowplaying === 'true';
-    if (!playing) return json({ playing: false, configured: true });
+    const playedAt = Number(track.date?.uts) || 0;
+    // Si no viene marcada en curso, vale el ultimo scrobble mientras sea
+    // reciente: hay reproductores que solo scrobblean al terminar la cancion.
+    const ageMin = playedAt ? (Date.now() / 1000 - playedAt) / 60 : Infinity;
+    const stale = !playing && ageMin > STALE_MINUTES;
 
     return json({
-      playing: true,
+      playing,
       configured: true,
+      stale,
+      playedAt: playing ? undefined : playedAt || undefined,
       artist: track.artist?.['#text'] ?? track.artist?.name ?? '',
       title: track.name ?? '',
       album: track.album?.['#text'] ?? '',

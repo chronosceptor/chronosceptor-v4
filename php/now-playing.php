@@ -16,6 +16,13 @@ header('Cache-Control: public, max-age=0, s-maxage=20');
 
 const ART_PREFIX = '/i/u/';
 
+/**
+ * Minutos desde el ultimo scrobble a partir de los cuales se considera que ya
+ * no se esta escuchando. Hace falta porque no todos los reproductores mandan
+ * la senal "now playing": varios solo scrobblean la cancion al terminarla.
+ */
+const STALE_MINUTES = 25;
+
 function respond(array $body): void
 {
     echo json_encode($body, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
@@ -87,16 +94,24 @@ $raw  = $data['recenttracks']['track'] ?? null;
 // Con limit=1 Last.fm devuelve a veces objeto y a veces array.
 $track = (is_array($raw) && array_key_exists(0, $raw)) ? $raw[0] : $raw;
 
-if (!is_array($track) || (($track['@attr']['nowplaying'] ?? '') !== 'true')) {
+if (!is_array($track)) {
     respond(['playing' => false, 'configured' => true]);
 }
 
+$playing  = ($track['@attr']['nowplaying'] ?? '') === 'true';
+$playedAt = (int) ($track['date']['uts'] ?? 0);
+// Si no viene marcada en curso, vale el ultimo scrobble mientras sea reciente.
+$ageMin = $playedAt ? (time() - $playedAt) / 60 : PHP_INT_MAX;
+$stale  = !$playing && $ageMin > STALE_MINUTES;
+
 respond([
-    'playing'   => true,
+    'playing'    => $playing,
     'configured' => true,
-    'artist'    => $track['artist']['#text'] ?? ($track['artist']['name'] ?? ''),
-    'title'     => $track['name'] ?? '',
-    'album'     => $track['album']['#text'] ?? '',
-    'art'       => art_path($track['image'] ?? null),
-    'url'       => is_string($track['url'] ?? null) ? $track['url'] : null,
+    'stale'      => $stale,
+    'playedAt'   => $playing ? null : ($playedAt ?: null),
+    'artist'     => $track['artist']['#text'] ?? ($track['artist']['name'] ?? ''),
+    'title'      => $track['name'] ?? '',
+    'album'      => $track['album']['#text'] ?? '',
+    'art'        => art_path($track['image'] ?? null),
+    'url'        => is_string($track['url'] ?? null) ? $track['url'] : null,
 ]);

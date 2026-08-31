@@ -8,7 +8,8 @@ No hay herramientas que elegir: hay una sola materia sólida y todo el comportam
 forma que dibujes.
 
 El color de la arena sale de la portada del disco que estés escuchando, vía Last.fm. Como la fuente
-rota el color por lotes, los montones que atrapes quedan estratificados.
+rota el color por lotes, los montones que atrapes quedan estratificados: al cambiar de canción, el
+color nuevo va sepultando al anterior.
 
 ## Arranque
 
@@ -110,6 +111,11 @@ Cosas que parecen arbitrarias en el código y no lo son:
 - **El desplazamiento de un grano barrido sigue la dirección de la pieza que lo empuja.** Una lista
   fija de huecos que mire a la izquierda antes que a la derecha haría que toda pieza en movimiento
   expulsara el material siempre hacia el mismo lado.
+- **Vale el último scrobble reciente, no solo la señal "now playing".** Muchos reproductores nunca
+  mandan esa señal y solo scrobblean la canción al terminarla; mirando únicamente `nowplaying` la
+  página se queda en la paleta por defecto aunque haya música sonando, que es indistinguible de
+  estar rota. Se acepta el último scrobble de los últimos 25 minutos, y la tarjeta dice cuánto hace
+  para no dar por "sonando" algo que quizá ya terminó.
 
 ## Historia
 

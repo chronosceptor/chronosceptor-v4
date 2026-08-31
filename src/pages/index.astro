@@ -129,11 +129,22 @@ import NowPlaying from '../components/NowPlaying.astro';
   const art = document.getElementById('sonando-portada') as HTMLImageElement;
   const title = document.getElementById('sonando-titulo') as HTMLElement;
   const artist = document.getElementById('sonando-artista') as HTMLElement;
+  const when = document.getElementById('sonando-cuando') as HTMLElement;
   const swatches = document.getElementById('sonando-paleta') as HTMLElement;
+
+  /** "4 min ago" / "1 h ago". Vacio si la cancion viene marcada en curso. */
+  function agoLabel(track: Track): string {
+    if (track.playing || !track.playedAt) return '';
+    const min = Math.max(0, Math.round(Date.now() / 1000 - track.playedAt) / 60);
+    if (min < 1) return 'just now';
+    if (min < 60) return `${Math.round(min)} min`;
+    return `${Math.round(min / 60)} h`;
+  }
 
   function showCard(track: Track, palette: Palette): void {
     title.textContent = track.title ?? '';
     artist.textContent = track.artist ?? '';
+    when.textContent = agoLabel(track);
     if (track.art) {
       art.src = track.art;
       art.hidden = false;
