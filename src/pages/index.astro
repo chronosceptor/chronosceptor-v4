@@ -1,6 +1,7 @@
 ---
 import SandCanvas from '../components/SandCanvas.astro';
 import NowPlaying from '../components/NowPlaying.astro';
+import Dock from '../components/Dock.astro';
 ---
 
 <!doctype html>
@@ -29,7 +30,7 @@ import NowPlaying from '../components/NowPlaying.astro';
   <body>
     <SandCanvas />
     <NowPlaying />
-
+    <Dock />
   </body>
 </html>
 
@@ -53,6 +54,7 @@ import NowPlaying from '../components/NowPlaying.astro';
 
 <script>
   import { boot } from '../sand';
+  import { mountDock } from '../sand/dock';
   import { watchNowPlaying, type Track } from '../lib/nowPlaying';
   import { paletteFromImage } from '../sand/color/extract';
   import { DEFAULT_PALETTE, rgbCss, type Palette } from '../sand/palette';
@@ -139,15 +141,25 @@ import NowPlaying from '../components/NowPlaying.astro';
   }
 
   // Se desvanece tras un rato sin actividad y vuelve al primer movimiento.
+  const dock = document.getElementById('dock') as HTMLElement;
   let idleTimer = 0;
   function wake(): void {
     card.classList.remove('reposo');
+    dock.classList.remove('reposo');
     clearTimeout(idleTimer);
-    idleTimer = window.setTimeout(() => card.classList.add('reposo'), 7000);
+    idleTimer = window.setTimeout(() => {
+      card.classList.add('reposo');
+      // Con una pieza en la mano el dock es la papelera: desvanecerlo justo
+      // entonces dejaria el gesto sin destino a la vista.
+      if (!dock.classList.contains('papelera')) dock.classList.add('reposo');
+    }, 7000);
   }
   for (const evt of ['pointermove', 'pointerdown', 'keydown'] as const) {
     window.addEventListener(evt, wake, { passive: true });
   }
+
+  mountDock(app, dock, wake);
+  wake();
 
   // --- Enlace entre la musica y la arena -----------------------------------
 

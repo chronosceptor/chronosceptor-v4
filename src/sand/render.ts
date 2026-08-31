@@ -9,6 +9,27 @@ export interface DrawCtx {
 }
 
 /**
+ * Boquilla de una fuente de material, con la punta en (`x`, `y`).
+ *
+ * Vive aqui y no en el renderer porque la comparten la fuente fija de la escena
+ * y las fuentes que el usuario coloca: son la misma cosa y tienen que verse
+ * igual, no parecerse.
+ */
+export function drawNozzle({ ctx, s }: DrawCtx, x: number, y: number): void {
+  ctx.strokeStyle = THEME.structureSoft;
+  ctx.lineWidth = 1;
+  const w = Math.max(8, s * 5);
+  const px = (x + 0.5) * s;
+  const py = y * s;
+  ctx.beginPath();
+  ctx.moveTo(px - w, py);
+  ctx.lineTo(px - w * 0.22, py + s * 5);
+  ctx.lineTo(px + w * 0.22, py + s * 5);
+  ctx.lineTo(px + w, py);
+  ctx.stroke();
+}
+
+/**
  * Render en dos capas superpuestas:
  *
  *  1. La arena va a un ImageData a resolución de grid, en un <canvas> pequeño
@@ -70,7 +91,12 @@ export class Renderer {
     this.sandCanvas.style.height = `${cssH}px`;
   }
 
-  paintSand(): void {
+  /**
+   * `ejecta` se superpone en el mismo buffer que los granos asentados, no en
+   * una capa aparte: la arena en vuelo es del mismo material a la vista, y asi
+   * no cuesta ni un drawImage.
+   */
+  paintSand(ejecta?: { paint(buf: Uint32Array, w: number, h: number): void }): void {
     const { mat, col, size } = this.grid;
     const buf = this.buf;
     const lut = this.matLut;
@@ -78,6 +104,7 @@ export class Renderer {
       const m = mat[i]!;
       buf[i] = m === SAND ? col[i]! : lut[m]!;
     }
+    ejecta?.paint(buf, this.grid.w, this.grid.h);
     this.sandCtx.putImageData(this.image, 0, 0);
   }
 
@@ -92,17 +119,7 @@ export class Renderer {
 
   /** La fuente, en el centro superior. */
   drawSource(d: DrawCtx, x: number): void {
-    const { ctx, s } = d;
-    ctx.strokeStyle = THEME.structureSoft;
-    ctx.lineWidth = 1;
-    const w = Math.max(8, s * 5);
-    const px = (x + 0.5) * s;
-    ctx.beginPath();
-    ctx.moveTo(px - w, 0);
-    ctx.lineTo(px - w * 0.22, s * 5);
-    ctx.lineTo(px + w * 0.22, s * 5);
-    ctx.lineTo(px + w, 0);
-    ctx.stroke();
+    drawNozzle(d, x, 0);
   }
 
   /**

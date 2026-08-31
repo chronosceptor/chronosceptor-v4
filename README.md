@@ -7,6 +7,11 @@ física. Una rampa la hace bajar, una U la atrapa, un embudo la concentra.
 No hay herramientas que elegir: hay una sola materia sólida y todo el comportamiento sale de la
 forma que dibujes.
 
+Además, del dock de abajo se arrastran **piezas** que participan de la física de verdad — una cruz
+que gira y avienta, una plataforma que patrulla llevándose el montón encima, una bomba y una fuente
+extra de arena. No son adornos pintados sobre el lienzo: su cuerpo se estampa en el grid como
+material sólido y la arena choca con él.
+
 El color de la arena sale de la portada del disco que estés escuchando, vía Last.fm. Como la fuente
 rota el color por lotes, los montones que atrapes quedan estratificados: al cambiar de canción, el
 color nuevo va sepultando al anterior.
@@ -40,6 +45,30 @@ Sin esas variables funciona igual, con la paleta ocre por defecto.
 El mismo gesto funciona con dedo y con ratón: no hace falta ningún selector de herramienta ni gestos
 que haya que aprender.
 
+### Las piezas
+
+Del dock de abajo se arrastra una ficha al lienzo y ahí se queda. Tres gestos en total:
+
+- **Arrastrar una ficha del dock** coloca la pieza. Tocarla sin arrastrar la deja en el centro de la
+  escena, que es donde se ve lo que hace.
+- **Arrastrar una pieza colocada** la mueve. Mientras la llevas, el dock se convierte en papelera.
+- **Quitarla**: la **×** que aparece al señalarla, o soltarla encima del dock.
+
+Y una excepción, solo para la bomba: **tocarla la detona** sin esperar a la mecha.
+
+| Pieza | Qué hace |
+|---|---|
+| **Cruz giratoria** | Cuatro aspas que giran y avientan la arena hacia el lado del giro |
+| **Plataforma** | Patrulla de izquierda a derecha **llevándose encima** lo que le caiga |
+| **Bomba** | Mecha de 2 s con un anillo que se vacía; revienta un radio de 42 celdas y se consume |
+| **Fuente** | Un segundo chorro, con su propio color dominante de la paleta |
+
+Las piezas van con tamaño y velocidad fijos: no hay ajustes ni panel, igual que no hay selector de
+brocha. Caben diez a la vez; al llegar al tope las fichas del dock se atenúan.
+
+La bomba no borra tus paredes. El dibujo es el trabajo de quien está jugando, y una pieza que lo
+barriera de golpe sería un castigo y no un juguete.
+
 El fondo tiene un **drenaje con nivel de guarda**: no drena nada hasta que el lienzo se llena casi
 del todo, y entonces abre una boca ancha en el centro y descarga hasta la mitad. Así el ciclo es un
 suceso —llenarse, descargar, volver a llenarse— y cada vuelta trae los colores de otra canción, que
@@ -58,8 +87,12 @@ El dibujo no se guarda: cada visita empieza en blanco.
 | `?mock=1` | Sirve una canción fija con portada local: permite afinar la extracción de color sin API key |
 | `?fill=0.2` | Baja el nivel al que dispara el drenaje. Sin esto, probar la descarga son varios minutos por ciclo |
 
-Desde la consola: `fabrica.inspect()` (arena, paredes, fps, grid), `fabrica.dump(x, y, w, h)`
-(vuelca los materiales de una región como texto) y `fabrica.clear()`.
+Desde la consola: `fabrica.inspect()` (arena, paredes, fps, grid, **piezas**, **ejecta** en vuelo y
+**perdidos**), `fabrica.dump(x, y, w, h)` (vuelca los materiales de una región como texto) y
+`fabrica.clear()`.
+
+`perdidos` es el contador que importa cuando se toca una pieza: son granos que salieron del grid y
+no encontraron dónde volver. Debe quedarse en cero. Si sube sin parar, algo está perdiendo masa.
 
 ## Estructura
 
@@ -75,6 +108,9 @@ src/
     input.ts               gestos
     index.ts               bucle principal
     physics.ts             el automata celular
+    ejecta.ts              arena en vuelo balistico (explosiones y aventado)
+    dock.ts                dock de piezas: arrastrar, mover, tirar
+    gadgets/               piezas: cruz, plataforma, bomba, fuente
     grid.ts, materials.ts, palette.ts, render.ts, rng.ts, color/extract.ts
   lib/nowPlaying.ts        poller cliente
 php/                       los dos endpoints en PHP, por si va a un VPS/cPanel
@@ -145,6 +181,67 @@ Cosas que parecen arbitrarias en el código y no lo son:
 - **La antigüedad se recalcula sola cada medio minuto.** El sondeo solo avisa cuando cambia la
   canción, así que sin un temporizador propio la etiqueta se congela en el valor que tuviera al
   aparecer y diría "just now" una hora después.
+
+### De las piezas
+
+- **Todas las piezas borran su cuerpo antes de que ninguna lo estampe.** Son dos pasadas separadas
+  sobre la lista, y no es estilo: en un solo recorrido, una pieza borraría el cuerpo recién escrito
+  de la que va detrás, y dos piezas que se tocan parpadearían y dejarían pasar la arena por la
+  junta.
+- **`physics.ts` no se tocó.** Las piezas no añaden ni una rama al bucle caliente del autómata: la
+  cruz funciona por el desplazamiento que ya hacía `Grid.stamp()`, y la plataforma reutiliza la
+  física de cintas que llevaba escrita y sin usar desde la fábrica original.
+- **La plataforma no es una pared que se mueve, es material de cinta.** Una barra sólida que se
+  desplaza se escurre por debajo del montón y lo deja caer en el sitio. Estampándola como
+  `BELT_L`/`BELT_R` con su `beltSpeed`, el arrastre por rozamiento de `physics.ts` alcanza cinco
+  capas hacia arriba y se lleva el montón entero, que es lo que se espera de una plataforma.
+- **`beltSpeed` se deriva de `dt`, no es una constante.** Es una probabilidad por paso de
+  simulación, no una velocidad: si el equipo baja la simulación a 30 Hz, cada paso vale el doble de
+  tiempo y el agarre tiene que doblarse, o la arena se queda atrás respecto a la barra que la lleva.
+- **El grano que una pieza no consigue apartar sale volando, no se destruye.** `displaceSand()` lo
+  eliminaba cuando no había hueco donde meterlo, y eso vacía la escena poco a poco: medido, una sola
+  cruz bajo el chorro se comía 337 granos en 5 s, un 15% del caudal, y el lienzo dejaba de llenarse
+  sin que nada lo explicara. Ahora hay un `Grid.overflow` que lo lanza. Además de conservar la masa
+  es lo correcto: una rueda de paletas avienta lo que no puede apartar.
+- **La arena en vuelo vive fuera del autómata.** `Grid.vel` es un `Uint8Array` de caída vertical y
+  no sabe representar un grano disparado en diagonal. Meter velocidad vectorial en el grid
+  engordaría el bucle caliente —que despacha 90.000 granos en 1,4 ms— a cambio de un efecto que dura
+  un segundo, así que la ejecta son arrays paralelos aparte que vuelven a ser granos normales al
+  chocar.
+- **La explosión vacía la esfera entera antes de lanzar nada.** Sacando cada grano y lanzándolo acto
+  seguido, los primeros salen mientras el resto sigue compacto: vuelan una celda, chocan contra
+  arena que aún no se ha retirado y no encuentran dónde aterrizar. Así se perdían 236 granos por
+  explosión.
+- **Al aterrizar se busca hueco en anillos, y en último recurso subiendo por la columna.** Casi toda
+  la ejecta nace dentro de un montón compacto, así que su celda de origen y todo lo que la rodea
+  están ocupados; mirando solo el vecindario inmediato se perdían 432 granos en diez segundos. La
+  subida por la columna cubre a los que una explosión lanza contra el fondo: en un montón siempre
+  hay aire por encima, y un grano que reaparece en la superficie se nota muchísimo menos que un
+  grano que desaparece.
+- **La cruz se dibuja sin aro exterior.** La rueda original lo llevaba, pero aquí mentía: el aro
+  sugiere una llanta sólida y lo único sólido son las aspas, así que se veía la arena atravesar
+  limpiamente una circunferencia dibujada. Lo que se pinta tiene que ser lo que para la arena.
+- **El sentido en que la cruz avienta se calcula celda a celda.** La rueda original estampaba sin
+  `pushDir`, así que el grano barrido salía hacia donde dictase la paridad de su celda y la rueda
+  escupía siempre al mismo lado girase como girase. El sentido correcto es el de la velocidad
+  tangencial: arriba del eje se barre hacia un lado y abajo hacia el contrario.
+- **`onMoved()` también se llama al colocar, no solo al arrastrar.** El fantasma se instancia fuera
+  de la pantalla y luego se le asigna el sitio de golpe; sin avisarlo, la plataforma seguía
+  centrando su patrulla en la esquina imposible donde nació y se iba a rebotar fuera del mundo.
+- **El aviso al dock se deduce de comparar el contador.** La bomba se consume sola dentro del bucle
+  de simulación, donde no hay ningún gesto del usuario del que colgar la notificación: acordándose
+  de avisar en cada sitio que añade o quita, su hueco se quedaba sin liberar y el dock seguía
+  anunciándose lleno con una plaza libre.
+- **Hay una × para quitar una pieza, además de la papelera del dock.** La papelera funciona, pero
+  solo se descubre después de haber arrastrado una pieza hasta allí, es decir, después de haber
+  adivinado que existe. La primera persona que lo probó preguntó justo eso: cómo se borra algo que
+  no sea una bomba.
+- **La posición de esa × se fija al señalar la pieza y no se recalcula.** La plataforma patrulla,
+  así que un botón atado a su centro se aparta mientras vas a pulsarlo: el ratón llega a donde
+  estaba y la pieza ya no. Un botón no puede huir del cursor.
+- **A la papelera se le pregunta antes de soltarla.** `isTrash` exige que el dock esté en modo
+  papelera y `onRelease` es justo lo que le quita ese modo, así que llamándolo primero la pregunta
+  salía siempre que no y tirar una pieza al dock no borraba nada.
 
 ## Historia
 

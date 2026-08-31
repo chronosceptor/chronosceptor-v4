@@ -1,0 +1,188 @@
+---
+/**
+ * Dock de piezas.
+ *
+ * Se arrastra una ficha al lienzo para colocarla. Mientras se arrastra una
+ * pieza ya colocada, el dock entero se convierte en papelera: es el mismo sitio
+ * de donde salio, asi que no hay una zona nueva que aprender ni un boton de
+ * borrar que buscar.
+ */
+
+const PIEZAS = [
+  { kind: 'spinner', label: 'Cruz giratoria' },
+  { kind: 'platform', label: 'Plataforma' },
+  { kind: 'bomb', label: 'Bomba' },
+  { kind: 'emitter', label: 'Fuente' },
+] as const;
+---
+
+<div id="dock" role="toolbar" aria-label="Piezas">
+  <div id="dock-fichas">
+    {
+      PIEZAS.map(({ kind, label }) => (
+        <button type="button" class="ficha" data-kind={kind} title={label} aria-label={label}>
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            {/* Sin aro: la ficha ensena lo que de verdad para la arena, que son
+                las aspas y el cubo. */}
+            {kind === 'spinner' && (
+              <>
+                <path d="M5.6 5.6l12.8 12.8M18.4 5.6L5.6 18.4" />
+                <circle cx="12" cy="12" r="1.6" />
+              </>
+            )}
+            {kind === 'platform' && (
+              <>
+                <path d="M3 14h18" />
+                <circle cx="5.5" cy="16.5" r="2.2" />
+                <circle cx="18.5" cy="16.5" r="2.2" />
+                <path d="M8 8h8M8 8l2.2-2.2M8 8l2.2 2.2M16 8l-2.2-2.2M16 8l-2.2 2.2" />
+              </>
+            )}
+            {kind === 'bomb' && (
+              <>
+                <circle cx="11" cy="14.5" r="6.2" />
+                <path d="M15.4 10.1l1.9-1.9M17.3 8.2c.9-1.4 2.2-1.4 3.1-.4" />
+              </>
+            )}
+            {kind === 'emitter' && (
+              <>
+                <path d="M5.5 4.5h13l-4.2 5.4h-4.6z" />
+                <path d="M12 12.4v1.7M12 16.2v1.7M12 20v1.2" />
+              </>
+            )}
+          </svg>
+        </button>
+      ))
+    }
+  </div>
+
+  <div id="dock-papelera" aria-hidden="true">
+    <svg viewBox="0 0 24 24" focusable="false">
+      <path d="M7 7l10 10M17 7L7 17" />
+    </svg>
+    <span>soltar para quitar</span>
+  </div>
+</div>
+
+<style>
+  #dock {
+    position: fixed;
+    bottom: clamp(14px, 3.5vh, 30px);
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    padding: 6px;
+    border-radius: 999px;
+    /* Mismo filete de un pixel que la maquinaria de la escena. */
+    outline: 1px solid #2a2a31;
+    background: rgba(15, 15, 17, 0.72);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    touch-action: none;
+    opacity: 1;
+    transition: opacity 900ms ease, outline-color 200ms ease;
+  }
+
+  /* Se retira sola cuando nadie toca nada, igual que la tarjeta de la cancion. */
+  #dock.reposo {
+    opacity: 0;
+  }
+
+  #dock-fichas {
+    display: flex;
+    gap: 2px;
+  }
+
+  .ficha {
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: #8a8a97;
+    cursor: grab;
+    touch-action: none;
+    -webkit-tap-highlight-color: transparent;
+    transition: color 160ms ease, background-color 160ms ease, opacity 200ms ease;
+  }
+
+  .ficha svg {
+    width: 24px;
+    height: 24px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.15;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .ficha:hover,
+  .ficha:focus-visible {
+    color: #d6d6e0;
+    background: rgba(255, 255, 255, 0.06);
+    outline: none;
+  }
+
+  .ficha:active {
+    cursor: grabbing;
+  }
+
+  /* Tope de piezas alcanzado: las fichas dejan de ofrecerse. */
+  #dock.lleno .ficha {
+    opacity: 0.3;
+    cursor: not-allowed;
+  }
+
+  /* --- Papelera ---------------------------------------------------------- */
+
+  #dock-papelera {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    height: 44px;
+    padding: 0 18px 0 14px;
+    color: #b4b4c0;
+    font-family: ui-sans-serif, system-ui, sans-serif;
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+  }
+
+  #dock-papelera svg {
+    width: 20px;
+    height: 20px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.15;
+    stroke-linecap: round;
+  }
+
+  /* Con una pieza en la mano el dock es el destino del gesto, asi que aparece
+     de golpe: heredando el fundido de 900 ms del reposo, la papelera terminaba
+     de dibujarse despues de que ya se hubiera soltado la pieza. */
+  #dock.papelera {
+    outline-color: #6a6a77;
+    opacity: 1;
+    transition: opacity 120ms ease;
+  }
+
+  #dock.papelera #dock-fichas {
+    display: none;
+  }
+
+  #dock.papelera #dock-papelera {
+    display: flex;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    #dock,
+    .ficha {
+      transition: none;
+    }
+  }
+</style>

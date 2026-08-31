@@ -1,10 +1,12 @@
-import { createWorld, clearWorld, transferDrawing, type World } from './world';
+import { createWorld, clearWorld, isDrawable, transferDrawing, type World } from './world';
 import { hasWallNear, paintStroke, type Point } from './draw';
 import { step } from './physics';
-import { Renderer } from './render';
+import { Renderer, type DrawCtx } from './render';
 import { Input } from './input';
-import { DEFAULT_PALETTE, type Palette } from './palette';
+import { DEFAULT_PALETTE, THEME, type Palette } from './palette';
 import { mulberry32 } from './rng';
+import { Ejecta } from './ejecta';
+import { createGadget, GadgetLayer, type Gadget, type GadgetKind } from './gadgets';
 
 export interface BootOptions {
   sandCanvas: HTMLCanvasElement;
@@ -17,6 +19,23 @@ export interface BootOptions {
   fillFrac?: number;
 }
 
+/**
+ * Lo que el dock necesita del lienzo, y lo que el lienzo necesita del dock.
+ *
+ * `src/sand/` no sabe nada del DOM del dock: pregunta por la papelera a traves
+ * de este puente en vez de buscar el elemento por id.
+ */
+export interface DockHooks {
+  /** ¿Este punto de pantalla cae sobre la papelera? */
+  isTrash(clientX: number, clientY: number): boolean;
+  /** Se agarro una pieza del lienzo: el dock se convierte en papelera. */
+  onGrab(): void;
+  /** Se solto. */
+  onRelease(): void;
+  /** Cambio el numero de piezas colocadas. */
+  onCount(count: number, full: boolean): void;
+}
+
 export interface SandApp {
   destroy(): void;
   /** Cambia la paleta con una pausa de "cambio de turno" de por medio. */
@@ -24,9 +43,30 @@ export interface SandApp {
   /** Vacia el lienzo. */
   clear(): void;
   readonly palette: Palette;
-  inspect(): { sand: number; walls: number; fps: number; grid: string; msSim: number; msRender: number; despiertas: number };
+  inspect(): {
+    sand: number;
+    walls: number;
+    fps: number;
+    grid: string;
+    msSim: number;
+    msRender: number;
+    despiertas: number;
+    piezas: number;
+    ejecta: number;
+    perdidos: number;
+  };
   /** Vuelca los materiales de una region como texto. Depuracion pura. */
   dump(x0: number, y0: number, w: number, h: number): string[];
+
+  // --- Colocacion de piezas, para el dock ---------------------------------
+  setDockHooks(h: DockHooks): void;
+  /** Empieza a arrastrar una ficha del dock. */
+  beginPlacement(kind: GadgetKind): void;
+  /** Mueve el fantasma. Coordenadas de pantalla: el dock captura el puntero. */
+  movePlacement(clientX: number, clientY: number): void;
+  /** Suelta la ficha. Devuelve true si la pieza se coloco. */
+  endPlacement(): boolean;
+  cancelPlacement(): void;
 }
 
 const SIM_HZ = 60;
@@ -47,6 +87,98 @@ export function boot(opts: BootOptions): SandApp {
   let renderer!: Renderer;
   let input: Input | null = null;
   const rand = mulberry32((Date.now() ^ 0x2545f491) >>> 0);
+
+  // --- Piezas -------------------------------------------------------------
+  //
+  // Viven fuera de `build()`: un redimensionado rehace el grid pero no debe
+  // tirar lo que el usuario haya colocado, igual que no tira su dibujo.
+  const gadgets = new GadgetLayer();
+  const ejecta = new Ejecta();
+  let dock: DockHooks | null = null;
+  /**
+   * La pieza que se esta arrastrando. Puede ser una del lienzo (`held`) o el
+   * fantasma de una ficha del dock, que es una pieza de verdad sin meter en la
+   * capa: asi la vista previa no puede desviarse de lo que se va a colocar.
+   */
+  let held: Gadget | null = null;
+  let ghost: Gadget | null = null;
+  let ghostOk = false;
+  /**
+   * Desde donde arranco el arrastre de la ficha, y si llego a salir de ahi.
+   *
+   * Mucha gente toca la ficha en vez de arrastrarla. Sin esto, ese toque no
+   * hace absolutamente nada y la pieza parece rota; con esto cae en el centro
+   * de la escena, que ademas es donde se ve lo que hace.
+   */
+  let ghostFrom: { x: number; y: number } | null = null;
+  let ghostMoved = false;
+
+  /**
+   * Ultimo numero de piezas comunicado al dock.
+   *
+   * El aviso se deduce de comparar el contador, no de acordarse de llamarlo en
+   * cada sitio que anade o quita: la bomba se consume sola dentro del bucle de
+   * simulacion, donde no hay ningun gesto del usuario del que colgar la
+   * notificacion, y su hueco se quedaba sin liberar — el dock seguia
+   * anunciandose lleno con una plaza libre.
+   */
+  let announced = -1;
+  const announce = (): void => {
+    announced = gadgets.count;
+    dock?.onCount(gadgets.count, gadgets.full);
+  };
+
+  /**
+   * La pieza bajo el puntero. La actualiza el pintado en cada frame.
+   *
+   * Solo la pieza senalada tiene boton de quitar activo: un aspa se cruza con
+   * el de la vecina en cuanto hay dos juntas, y pulsar el boton invisible de
+   * una pieza que ni siquiera esta senalada es la clase de sorpresa que hace
+   * desconfiar de una herramienta.
+   */
+  let hovered: Gadget | null = null;
+
+  /**
+   * Boton de quitar, arriba a la derecha de la pieza.
+   *
+   * La papelera del dock funciona, pero solo se descubre despues de haber
+   * arrastrado una pieza hasta alli — es decir, despues de haber adivinado que
+   * existe. Una aspa visible en cuanto senalas la pieza no hay que adivinarla.
+   *
+   * Su posicion se fija al senalar la pieza y no se recalcula despues. La
+   * plataforma patrulla, asi que un boton atado a su centro se aparta mientras
+   * vas a pulsarlo: el raton llega donde estaba y la pieza ya no. Un boton no
+   * puede huir del cursor.
+   */
+  const BADGE_R = 4.5;
+  let badge: Point | null = null;
+
+  function badgeAt(g: Gadget): Point {
+    const d = g.radius + 4;
+    return { x: Math.round(g.cx + d * 0.707), y: Math.round(g.cy - d * 0.707) };
+  }
+  function overBadge(c: Point): boolean {
+    if (!badge) return false;
+    const dx = c.x - badge.x;
+    const dy = c.y - badge.y;
+    // Radio de acierto algo mayor que el dibujado: es un objetivo pequeno.
+    return dx * dx + dy * dy <= (BADGE_R + 1.5) * (BADGE_R + 1.5);
+  }
+  function setHovered(g: Gadget | null): void {
+    if (g === hovered) return;
+    hovered = g;
+    badge = g ? badgeAt(g) : null;
+  }
+
+  /** ¿Cabe una pieza de este radio centrada aqui? */
+  function canPlace(cx: number, cy: number, radius: number, ignore?: Gadget | null): boolean {
+    const g = world.grid;
+    if (cx - radius < 0 || cx + radius > g.w - 1) return false;
+    if (cy - radius < 0) return false;
+    // Las filas reservadas protegen el drenaje, igual que con la brocha.
+    if (!isDrawable(g, cy + radius)) return false;
+    return gadgets.fits(cx, cy, radius, ignore);
+  }
 
   let raf = 0;
   let last = 0;
@@ -71,6 +203,17 @@ export function boot(opts: BootOptions): SandApp {
     world = createWorld(cssW, cssH, opts.fillFrac);
     if (previous) transferDrawing(previous.grid, world.grid);
 
+    // El grano que una pieza en movimiento no logra apartar sale volando en vez
+    // de evaporarse. Es lo que convierte a la cruz en algo que avienta y no en
+    // algo que se come la arena, y de paso mantiene constante la masa.
+    world.grid.overflow = (x, y, color, pushDir) => {
+      const dir = pushDir !== 0 ? pushDir : rand() < 0.5 ? -1 : 1;
+      // Con algo de impulso hacia arriba: lanzado en horizontal dentro de un
+      // monton, el grano choca en la celda de al lado y vuelve a quedar bajo la
+      // misma aspa, que lo barre otra vez.
+      return ejecta.launch(x, y, dir * (45 + rand() * 45), -30 - rand() * 40, color);
+    };
+
     renderer = new Renderer(sandCanvas, fxCanvas, world.grid);
     renderer.resize(cssW, cssH);
 
@@ -84,16 +227,119 @@ export function boot(opts: BootOptions): SandApp {
       hasWall: (c) => hasWallNear(world.grid, c.x, c.y, world.profile.brush),
       paint: (from, to, erase) =>
         paintStroke(world.grid, from, to, world.profile.brush, erase),
+
+      // El boton de quitar cae fuera del radio de la pieza, asi que tambien
+      // tiene que reclamar el gesto: si no, pulsarlo dibujaria una pared.
+      hasGadget: (c) => gadgets.hit(c.x, c.y) !== null || overBadge(c),
+
+      grab: (c) => {
+        if (hovered && overBadge(c)) {
+          gadgets.remove(hovered, world.grid);
+          setHovered(null);
+          announce();
+          return; // `held` sigue vacio: esto no era el principio de un arrastre
+        }
+        held = gadgets.hit(c.x, c.y);
+        if (held) dock?.onGrab();
+      },
+
+      dragTo: (c) => {
+        if (!held) return;
+        // Se mueve aunque el destino sea invalido: frenar la pieza contra un
+        // obstaculo la despega del dedo y se siente rota. La validez decide
+        // donde se queda al soltar, no donde puede pasar mientras arrastra.
+        held.cx = c.x;
+        held.cy = c.y;
+        held.onMoved?.();
+      },
+
+      drop: (c, clientX, clientY, tap) => {
+        const g = held;
+        held = null;
+        // Se pregunta por la papelera ANTES de soltarla. `isTrash` exige que el
+        // dock este en modo papelera, y `onRelease` es justo lo que le quita ese
+        // modo: llamandolo primero, la pregunta salia siempre que no, y tirar
+        // una pieza al dock no borraba nada.
+        const tirar = !tap && (dock?.isTrash(clientX, clientY) ?? false);
+        dock?.onRelease();
+        if (!g) return;
+
+        if (tap) {
+          g.tap?.();
+          if (g.dead) announce();
+          return;
+        }
+        if (tirar) {
+          gadgets.remove(g, world.grid);
+          announce();
+          return;
+        }
+        // Destino invalido: la pieza vuelve a un sitio donde quepa.
+        if (!canPlace(c.x, c.y, g.radius, g)) {
+          const home = nearestFit(c.x, c.y, g.radius, g);
+          g.cx = home.x;
+          g.cy = home.y;
+        }
+        g.onMoved?.();
+      },
     });
+  }
+
+  /**
+   * El sitio valido mas cercano para una pieza.
+   *
+   * Se busca en anillos hacia fuera. Si no hay ninguno —lienzo abarrotado— se
+   * devuelve el punto pedido: es mejor una pieza solapada que una que
+   * desaparece sin explicacion al soltarla.
+   */
+  function nearestFit(x: number, y: number, radius: number, ignore?: Gadget | null): Point {
+    const g = world.grid;
+    const cx = Math.max(radius, Math.min(g.w - 1 - radius, x));
+    const cy = Math.max(radius, Math.min(g.h - 1 - radius, y));
+    if (canPlace(cx, cy, radius, ignore)) return { x: cx, y: cy };
+    for (let r = 2; r < 60; r += 2) {
+      for (let a = 0; a < 12; a++) {
+        const t = (a / 12) * Math.PI * 2;
+        const nx = Math.round(cx + Math.cos(t) * r);
+        const ny = Math.round(cy + Math.sin(t) * r);
+        if (canPlace(nx, ny, radius, ignore)) return { x: nx, y: ny };
+      }
+    }
+    return { x: cx, y: cy };
   }
 
   // --- Bucle --------------------------------------------------------------
 
+  /**
+   * Un paso de simulacion.
+   *
+   * El orden importa y no es arbitrario:
+   *
+   *  1. El drenaje decide si abre.
+   *  2. Las piezas borran y reescriben su cuerpo (dos pasadas, ver GadgetLayer).
+   *  3. Los emisores siembran.
+   *  4. La arena en vuelo se integra y aterriza, ANTES del automata, para que
+   *     lo que acaba de depositarse se asiente en este mismo paso en vez de
+   *     quedarse flotando un frame.
+   *  5. El automata. Intacto: las piezas no le anaden ni una rama.
+   */
   function simulate(dt: number): void {
     const { grid, source, drain, profile } = world;
     drain.tick(grid, source.blocked);
 
-    if (shift > 0) {
+    // Durante la pausa entre canciones no siembra nadie: presupuesto cero para
+    // las piezas emisoras tambien, no solo para la fuente principal.
+    const paused = shift > 0;
+    const headroom = (): number => Math.max(0, profile.maxSand - grid.sandCount);
+
+    gadgets.tick(
+      { grid, ejecta, palette, rand, budget: paused ? 0 : headroom() },
+      dt,
+    );
+    // Una pieza puede haberse consumido sola (la bomba al estallar).
+    if (gadgets.count !== announced) announce();
+
+    if (paused) {
       shift -= dt;
       if (shift <= 0 && pending) {
         palette = pending;
@@ -102,20 +348,89 @@ export function boot(opts: BootOptions): SandApp {
         source.newBatch();
       }
     } else {
-      source.tick(grid, dt, palette, rand, Math.max(0, profile.maxSand - grid.sandCount));
+      source.tick(grid, dt, palette, rand, headroom());
     }
 
+    ejecta.step(grid, dt);
     step(grid, rand, frame++);
   }
 
   function render(): void {
-    renderer.paintSand();
+    renderer.paintSand(ejecta);
     const d = renderer.beginFx();
     renderer.drawSource(d, world.source.x);
-    if (input?.present) {
-      renderer.drawCursor(d, input.x, input.y, world.profile.brush, input.mode === 'erase');
+    gadgets.draw(d);
+
+    // El fantasma es una pieza de verdad sin colocar: se pinta con su propio
+    // draw() y no con un dibujo aparte que pudiera mentir sobre el tamano.
+    if (ghost) {
+      const { ctx } = d;
+      ctx.save();
+      ctx.globalAlpha = ghostOk ? 0.55 : 0.25;
+      if (!ghostOk) ctx.setLineDash([3, 3]);
+      ghost.draw(d);
+      ctx.restore();
     }
+
+    if (input?.present && !held && !ghost) {
+      const cell = { x: Math.floor(input.x / renderer.s), y: Math.floor(input.y / renderer.s) };
+      // La pieza senalada se mantiene mientras el puntero siga sobre ella o
+      // sobre su boton de quitar; si no, el boton desapareceria justo al ir a
+      // pulsarlo, que es el clasico menu que se escapa.
+      setHovered(gadgets.hit(cell.x, cell.y) ?? (overBadge(cell) ? hovered : null));
+
+      if (hovered) {
+        drawHandles(d, hovered);
+      } else {
+        renderer.drawCursor(d, input.x, input.y, world.profile.brush, input.mode === 'erase');
+      }
+    } else if (!held) {
+      setHovered(null);
+    }
+
     if (opts.debug) drawDebug(d.ctx);
+  }
+
+  /**
+   * Lo que aparece al senalar una pieza: el aro de agarre y el boton de quitar.
+   *
+   * El aro es la unica senal de que el gesto va a mover la pieza en vez de
+   * dibujar una pared encima de ella, y la aspa es la respuesta a "y esto como
+   * se quita", que arrastrandolo hasta el dock no se contesta sola.
+   */
+  function drawHandles(d: DrawCtx, g: Gadget): void {
+    const { ctx, s } = d;
+    ctx.save();
+    ctx.lineWidth = 1;
+
+    ctx.strokeStyle = THEME.ink;
+    ctx.setLineDash([2, 4]);
+    ctx.beginPath();
+    ctx.arc((g.cx + 0.5) * s, (g.cy + 0.5) * s, (g.radius + 2.5) * s, 0, Math.PI * 2);
+    ctx.stroke();
+
+    const b = badge ?? badgeAt(g);
+    const bx = (b.x + 0.5) * s;
+    const by = (b.y + 0.5) * s;
+    const r = BADGE_R * s;
+    ctx.setLineDash([]);
+    // Relleno opaco: encima de un monton de arena clara, una aspa a pelo se
+    // pierde entre los granos.
+    ctx.fillStyle = 'rgba(11,11,12,0.85)';
+    ctx.beginPath();
+    ctx.arc(bx, by, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = THEME.inkBright;
+    ctx.stroke();
+
+    const k = r * 0.42;
+    ctx.beginPath();
+    ctx.moveTo(bx - k, by - k);
+    ctx.lineTo(bx + k, by + k);
+    ctx.moveTo(bx + k, by - k);
+    ctx.lineTo(bx - k, by + k);
+    ctx.stroke();
+    ctx.restore();
   }
 
   function countWalls(): number {
@@ -133,6 +448,7 @@ export function boot(opts: BootOptions): SandApp {
       `arena ${grid.sandCount}  paredes ${countWalls()}`,
       `sim ${msSim.toFixed(1)}ms  pintado ${msRender.toFixed(1)}ms`,
       `brocha ${profile.brush}  modo ${input?.mode ?? '-'}`,
+      `piezas ${gadgets.count}  ejecta ${ejecta.count}  perdidos ${ejecta.lost}`,
     ];
     ctx.save();
     ctx.font = '11px ui-monospace, monospace';
@@ -193,7 +509,14 @@ export function boot(opts: BootOptions): SandApp {
       // navegador altera la altura de la ventana con solo hacer scroll, y
       // reconstruir en cada temblor tiraria el dibujo a cada rato.
       if (Math.abs(w - world.grid.w) < 3 && Math.abs(h - world.grid.h) < 3) return;
+      const prevW = world.grid.w;
+      const prevH = world.grid.h;
       build(world);
+      // Las piezas guardan celdas, no pixeles: con un grid nuevo hay que
+      // reescalarlas o acaban descolocadas respecto al dibujo, que si se
+      // transfiere celda a celda. La arena en vuelo se descarta.
+      gadgets.rescale(world.grid.w / prevW, world.grid.h / prevH, world.grid);
+      ejecta.clear();
     }, 250);
   };
 
@@ -216,8 +539,71 @@ export function boot(opts: BootOptions): SandApp {
       shift = SHIFT_PAUSE;
     },
     clear(): void {
+      gadgets.clearAll(world.grid);
+      ejecta.clear();
+      held = null;
+      ghost = null;
       clearWorld(world.grid, world.drain);
+      announce();
     },
+
+    setDockHooks(h: DockHooks): void {
+      dock = h;
+      announce();
+    },
+
+    beginPlacement(kind: GadgetKind): void {
+      if (gadgets.full) return;
+      // Nace fuera de la pantalla: hasta el primer movimiento no hay sitio al
+      // que apuntar, y aparecer en la esquina superior izquierda seria un
+      // parpadeo en un sitio que no significa nada.
+      ghost = createGadget(kind, -1000, -1000);
+      ghostOk = false;
+      ghostFrom = null;
+      ghostMoved = false;
+    },
+
+    movePlacement(clientX: number, clientY: number): void {
+      if (!ghost) return;
+      if (!ghostFrom) ghostFrom = { x: clientX, y: clientY };
+      else if (Math.hypot(clientX - ghostFrom.x, clientY - ghostFrom.y) > 12) ghostMoved = true;
+
+      const r = fxCanvas.getBoundingClientRect();
+      ghost.cx = Math.floor((clientX - r.left) / renderer.s);
+      ghost.cy = Math.floor((clientY - r.top) / renderer.s);
+      // El fantasma nace fuera de la pantalla y aqui se le asigna el sitio de
+      // golpe, sin pasar por ningun arrastre: sin avisarlo, una pieza que ate
+      // estado a su posicion —la plataforma centra ahi su patrulla— se queda
+      // creyendo que vive en la esquina imposible donde se instancio.
+      ghost.onMoved?.();
+      ghostOk = canPlace(ghost.cx, ghost.cy, ghost.radius);
+    },
+
+    endPlacement(): boolean {
+      const g = ghost;
+      ghost = null;
+      if (!g) return false;
+
+      // Un toque sin arrastre la coloca en el centro de la escena, bajo el
+      // chorro: es donde se ve lo que hace la pieza.
+      if (!ghostMoved) {
+        const home = nearestFit(world.grid.w >> 1, Math.round(world.grid.h * 0.45), g.radius);
+        g.cx = home.x;
+        g.cy = home.y;
+      } else if (!ghostOk) {
+        return false;
+      }
+
+      g.onMoved?.();
+      if (!gadgets.add(g)) return false;
+      announce();
+      return true;
+    },
+
+    cancelPlacement(): void {
+      ghost = null;
+    },
+
     get palette(): Palette {
       return pending ?? palette;
     },
@@ -233,6 +619,11 @@ export function boot(opts: BootOptions): SandApp {
         msSim: +msSim.toFixed(2),
         msRender: +msRender.toFixed(2),
         despiertas,
+        piezas: gadgets.count,
+        ejecta: ejecta.count,
+        // Granos que no encontraron hueco al aterrizar. Deberia quedarse en
+        // cero o casi: si sube sin parar, la ejecta esta perdiendo masa.
+        perdidos: ejecta.lost,
       };
     },
     dump(x0: number, y0: number, w: number, h: number): string[] {
@@ -252,3 +643,4 @@ export function boot(opts: BootOptions): SandApp {
 }
 
 export type { Palette } from './palette';
+export type { GadgetKind } from './gadgets';

@@ -71,11 +71,17 @@ export class Source {
   private blockedFor = 0;
 
   constructor(
-    readonly x: number,
+    /**
+     * Posicion de la boquilla, en celdas. No es `readonly` porque las fuentes
+     * que el usuario coloca se arrastran; la fija de la escena nunca la cambia.
+     */
+    public x: number,
     readonly halfWidth: number,
     readonly rate: number,
     private readonly colorPeriod: number,
     private readonly rng: Rng,
+    /** Fila donde siembra. 0 es el borde superior, que es donde va la fija. */
+    public y = 0,
   ) {}
 
   /** Arranca un lote de color nuevo. Lo llama el cambio de cancion. */
@@ -100,10 +106,10 @@ export class Source {
     let placed = 0;
     for (let k = 0; k < n; k++) {
       const x = this.x + randInt(rand, -this.halfWidth, this.halfWidth);
-      // Se siembra en las dos primeras filas: con una sola, los granos que no
-      // caben se pierden y el chorro sale entrecortado.
-      if (g.addSand(x, 0, grainColor(palette, rand, this.dominant, 0.94))) placed++;
-      else if (g.addSand(x, 1, grainColor(palette, rand, this.dominant, 0.94))) placed++;
+      // Se siembra en dos filas: con una sola, los granos que no caben se
+      // pierden y el chorro sale entrecortado.
+      if (g.addSand(x, this.y, grainColor(palette, rand, this.dominant, 0.94))) placed++;
+      else if (g.addSand(x, this.y + 1, grainColor(palette, rand, this.dominant, 0.94))) placed++;
     }
     this.blockedFor = placed === 0 ? this.blockedFor + dt : 0;
   }

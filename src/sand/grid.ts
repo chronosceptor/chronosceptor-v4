@@ -30,6 +30,19 @@ export class Grid {
 
   sandCount = 0;
 
+  /**
+   * Salida para un grano barrido que no cabe en ningun hueco.
+   *
+   * Sin ella `displaceSand` lo destruye, y cualquier pieza en movimiento metida
+   * en un monton compacto va vaciando la escena: medido, una sola cruz bajo el
+   * chorro se comia 337 granos en 5 s — un 15% del caudal — y el lienzo dejaba
+   * de llenarse sin que nada lo explicara.
+   *
+   * Devuelve true si se hace cargo del grano. Lo natural es lanzarlo: una rueda
+   * de paletas avienta lo que no puede apartar, no lo hace desaparecer.
+   */
+  overflow: ((x: number, y: number, color: number, pushDir: number) => boolean) | null = null;
+
   constructor(w: number, h: number) {
     this.w = w;
     this.h = h;
@@ -152,14 +165,32 @@ export class Grid {
         return; // sandCount no cambia: el grano se movió, no se destruyó
       }
     }
-    // No cabía en ningún lado: ahora sí se pierde.
+    // No cabia en ningun hueco. Sale del grid en cualquier caso; la diferencia
+    // es si sigue existiendo (sale volando) o se pierde de verdad.
     this.mat[i] = EMPTY;
     this.col[i] = 0;
     this.sandCount--;
+    this.overflow?.(x, y, color, d);
   }
 
   fillRect(x0: number, y0: number, x1: number, y1: number, material: number): void {
     for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) this.stamp(x, y, material);
+  }
+
+  /** Disco relleno. Para cubos de rueda y cuerpos redondos de maquina. */
+  stampDisc(cx: number, cy: number, r: number, material: number, pushDir = 0): void {
+    const r2 = r * r;
+    const y0 = Math.floor(cy - r);
+    const y1 = Math.ceil(cy + r);
+    const x0 = Math.floor(cx - r);
+    const x1 = Math.ceil(cx + r);
+    for (let y = y0; y <= y1; y++) {
+      const dy = y - cy;
+      for (let x = x0; x <= x1; x++) {
+        const dx = x - cx;
+        if (dx * dx + dy * dy <= r2) this.stamp(x, y, material, pushDir);
+      }
+    }
   }
 
   /** Bresenham, para rampas y aspas en cualquier ángulo. */
