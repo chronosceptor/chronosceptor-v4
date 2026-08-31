@@ -1,6 +1,5 @@
 ---
 import SandCanvas from '../components/SandCanvas.astro';
-import NowPlaying from '../components/NowPlaying.astro';
 import Dock from '../components/Dock.astro';
 ---
 
@@ -29,7 +28,6 @@ import Dock from '../components/Dock.astro';
   </head>
   <body>
     <SandCanvas />
-    <NowPlaying />
     <Dock />
   </body>
 </html>
@@ -55,9 +53,9 @@ import Dock from '../components/Dock.astro';
 <script>
   import { boot } from '../sand';
   import { mountDock } from '../sand/dock';
-  import { watchNowPlaying, type Track } from '../lib/nowPlaying';
+  import { watchNowPlaying } from '../lib/nowPlaying';
   import { paletteFromImage } from '../sand/color/extract';
-  import { DEFAULT_PALETTE, rgbCss, type Palette } from '../sand/palette';
+  import { DEFAULT_PALETTE } from '../sand/palette';
 
   const params = new URLSearchParams(location.search);
   /** `?mock` sirve un track fijo: permite afinar el color sin API key. */
@@ -75,80 +73,13 @@ import Dock from '../components/Dock.astro';
   // Para trastear desde la consola: `fabrica.clear()` vacia el lienzo.
   (window as any).fabrica = app;
 
-  // --- Tarjeta de "sonando ahora" ------------------------------------------
-
-  const card = document.getElementById('sonando') as HTMLAnchorElement;
-  const art = document.getElementById('sonando-portada') as HTMLImageElement;
-  const title = document.getElementById('sonando-titulo') as HTMLElement;
-  const artist = document.getElementById('sonando-artista') as HTMLElement;
-  const when = document.getElementById('sonando-cuando') as HTMLElement;
-  const swatches = document.getElementById('sonando-paleta') as HTMLElement;
-
-  /**
-   * Contexto temporal: si suena ahora, o cuanto hace que se escucho.
-   *
-   * El caso en vivo es el que mas dice y antes no se etiquetaba: quedaba vacio,
-   * indistinguible de una cancion de hace rato.
-   */
-  function agoLabel(track: Track): string {
-    if (track.playing) return 'now playing';
-    if (!track.playedAt) return '';
-    const min = Math.max(0, (Date.now() / 1000 - track.playedAt) / 60);
-    if (min < 1) return 'just now';
-    if (min < 60) return `${Math.round(min)} min ago`;
-    return `${Math.round(min / 60)} h ago`;
-  }
-
-  /** Cancion en pantalla, para poder refrescar su antiguedad. */
-  let current: Track | null = null;
-
-  /**
-   * La antiguedad se recalcula sola cada medio minuto.
-   *
-   * El sondeo solo avisa cuando cambia la cancion, asi que sin esto la etiqueta
-   * se congela en el valor que tuviera al aparecer: diria "just now" una hora
-   * despues.
-   */
-  window.setInterval(() => {
-    if (current) when.textContent = agoLabel(current);
-  }, 30000);
-
-  function showCard(track: Track, palette: Palette): void {
-    current = track;
-    title.textContent = track.title ?? '';
-    artist.textContent = track.artist ?? '';
-    when.textContent = agoLabel(track);
-    when.classList.toggle('vivo', track.playing);
-    if (track.art) {
-      art.src = track.art;
-      art.hidden = false;
-    } else {
-      art.removeAttribute('src');
-      art.hidden = true;
-    }
-    if (track.url) card.href = track.url;
-    else card.removeAttribute('href');
-
-    swatches.replaceChildren(
-      ...palette.colors.slice(0, 5).map((c) => {
-        const i = document.createElement('i');
-        i.style.background = rgbCss(c);
-        return i;
-      }),
-    );
-    card.hidden = false;
-    wake();
-  }
-
   // Se desvanece tras un rato sin actividad y vuelve al primer movimiento.
   const dock = document.getElementById('dock') as HTMLElement;
   let idleTimer = 0;
   function wake(): void {
-    card.classList.remove('reposo');
     dock.classList.remove('reposo');
     clearTimeout(idleTimer);
     idleTimer = window.setTimeout(() => {
-      card.classList.add('reposo');
       // Con una pieza en la mano el dock es la papelera: desvanecerlo justo
       // entonces dejaria el gesto sin destino a la vista.
       if (!dock.classList.contains('papelera')) dock.classList.add('reposo');
@@ -162,6 +93,10 @@ import Dock from '../components/Dock.astro';
   wake();
 
   // --- Enlace entre la musica y la arena -----------------------------------
+  //
+  // La cancion no se muestra en ninguna parte: lo unico que sale de ella es el
+  // color. Se sigue sondeando porque hace falta saber que suena para pedir su
+  // portada, pero el titulo y el artista no llegan a pintarse.
 
   watchNowPlaying(
     async (track) => {
@@ -169,8 +104,6 @@ import Dock from '../components/Dock.astro';
         // Sin musica sonando se vuelve a la paleta ocre; el regreso del color
         // al dar play es lo que hace visible que la pagina esta escuchando.
         app.setPalette(DEFAULT_PALETTE);
-        current = null;
-        card.hidden = true;
         return;
       }
 
@@ -180,7 +113,6 @@ import Dock from '../components/Dock.astro';
         if (extracted) palette = extracted;
       }
       app.setPalette(palette);
-      showCard(track, palette);
     },
     20000,
     mock ? '/api/now-playing?mock=1' : '/api/now-playing',

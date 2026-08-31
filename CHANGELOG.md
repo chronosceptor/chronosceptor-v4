@@ -49,6 +49,16 @@ versionado según [SemVer](https://semver.org/lang/es/).
   Ahora hay un `Grid.overflow` que lo lanza en vez de destruirlo: además de conservar la masa
   es lo correcto, porque una rueda de paletas avienta lo que no puede apartar.
 
+### Removed
+
+- La tarjeta de "sonando ahora" (portada, título, artista y estado de escucha). El color
+  sigue saliendo de la portada del disco; lo que se va es enseñar de qué disco se trata.
+  Leer un nombre convertía el lienzo en el widget de un reproductor. Se sigue sondeando
+  Last.fm porque hace falta saber qué suena para pedir la portada, pero el título y el
+  artista ya no se pintan: sólo entran en la clave de caché de la extracción de color.
+  Con ella se van `src/components/NowPlaying.astro`, la etiqueta de antigüedad que se
+  recalculaba cada medio minuto y las muestras de paleta.
+
 ### Security
 
 ## [0.1.0] - 2026-08-31

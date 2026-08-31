@@ -103,7 +103,7 @@ src/
   pages/index.astro        pagina + cableado entre la musica y la simulacion
   pages/api/now-playing.ts proxy de Last.fm (la API key nunca llega al browser)
   pages/api/art.ts         proxy de portadas (same-origin => canvas legible)
-  components/              isla de canvas y tarjeta de "sonando ahora"
+  components/              isla de canvas y dock de piezas
   sand/
     world.ts               mundo vacio, fuente y drenaje del fondo
     draw.ts                brocha, interpolacion de trazo, dibujar y borrar
@@ -178,11 +178,12 @@ Cosas que parecen arbitrarias en el código y no lo son:
 - **Vale el último scrobble reciente, no solo la señal "now playing".** Muchos reproductores nunca
   mandan esa señal y solo scrobblean la canción al terminarla; mirando únicamente `nowplaying` la
   página se queda en la paleta por defecto aunque haya música sonando, que es indistinguible de
-  estar rota. Se acepta el último scrobble de los últimos 25 minutos, y la tarjeta etiqueta siempre
-  el estado —`NOW PLAYING` o `13 MIN AGO`— para no dar por "sonando" algo que quizá ya terminó.
-- **La antigüedad se recalcula sola cada medio minuto.** El sondeo solo avisa cuando cambia la
-  canción, así que sin un temporizador propio la etiqueta se congela en el valor que tuviera al
-  aparecer y diría "just now" una hora después.
+  estar rota. Se acepta el último scrobble de los últimos 25 minutos.
+- **La canción no se muestra en ninguna parte.** Hubo una tarjeta con portada, título, artista y
+  estado de escucha, y se quitó: lo interesante es que el color venga de lo que suena, no leer un
+  nombre. Enseñarlo convierte el lienzo en el widget de un reproductor. El sondeo sigue vivo porque
+  hace falta saber qué suena para pedir su portada, pero el título y el artista no llegan a
+  pintarse — sólo entran en la clave de caché de la extracción de color.
 
 ### De las piezas
 
