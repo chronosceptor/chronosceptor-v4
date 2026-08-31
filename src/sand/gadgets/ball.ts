@@ -1,5 +1,5 @@
 import type { Grid } from '../grid';
-import { SAND } from '../materials';
+import { SAND, WALL } from '../materials';
 import { THEME, rgbCss } from '../palette';
 import type { DrawCtx } from '../render';
 import { RESERVED_ROWS } from '../world';
@@ -25,19 +25,30 @@ const BALL_R = 13;
 const GRAB_R = 18;
 /** Rapidez, en celdas/s. Constante: no hay gravedad ni rozamiento. */
 const SPEED = 145;
+/**
+ * Celdas que se aparta de una pared en cada paso en que la toca.
+ *
+ * Hace falta para el caso en que la pared aparece encima de la bola —dibujas
+ * justo donde esta— y no basta con rebotar: hay que ir sacandola.
+ */
+const PUSH_OUT = 1.5;
 
 /**
- * Bola que rebota en los bordes y se come la arena que toca.
+ * Bola que rebota y se come la arena que toca.
+ *
+ * Rebota contra los bordes del lienzo y contra las paredes dibujadas, asi que
+ * el trazo sirve para dirigirla: una rampa la desvia, un cuenco la encierra a
+ * ricochetear dentro y una pared la manda de vuelta.
+ *
+ * Encerrarla es posible y es parte del juego. Al principio atravesaba el dibujo
+ * justamente para que no pudiera quedar atrapada y dejase de limpiar, pero eso
+ * era tratarla solo como una escoba: pudiendo chocar, el dibujo se convierte en
+ * la mesa de un pinball. Si se queda encerrada, se saca arrastrandola.
  *
  * No tiene cuerpo solido en el grid. Podria estamparse como DYN para que la
  * arena chocase con ella, pero seria trabajo tirado: lo que hay dentro de su
  * radio deja de existir en el mismo paso, asi que nunca habria nada contra lo
  * que chocar.
- *
- * Rebota solo contra los bordes del lienzo, no contra las paredes dibujadas.
- * Es deliberado: sirve para vaciar la pantalla, y una bola que rebotase en el
- * dibujo se quedaria encerrada dentro del primer cuenco que se encontrara y no
- * volveria a limpiar nada.
  */
 export class Ball implements Gadget {
   readonly kind = 'ball';
@@ -47,11 +58,18 @@ export class Ball implements Gadget {
   dead = false;
   held = false;
 
-  /** Posicion en celdas, en coma flotante: a esta velocidad los enteros dan tirones. */
-  private px: number;
-  private py: number;
-  private vx: number;
-  private vy: number;
+  /**
+   * Posicion y velocidad en celdas y celdas/s, en coma flotante: a esta
+   * velocidad los enteros dan tirones.
+   *
+   * No son privados porque `resolveBallCollisions` los toca. El choque entre
+   * dos bolas no es comportamiento de ninguna de ellas por separado, asi que
+   * vive fuera de la clase.
+   */
+  px: number;
+  py: number;
+  vx: number;
+  vy: number;
 
   constructor(
     public cx: number,
@@ -74,6 +92,19 @@ export class Ball implements Gadget {
     this.py = this.cy;
   }
 
+  /**
+   * La celda sigue a la posicion fina.
+   *
+   * Lo llama la resolucion de choques, que corre despues de que todas las
+   * piezas hayan hecho su paso: mueve `px`/`py` cuando dos bolas se separan, y
+   * sin esto la celda se quedaria en el valor de antes del choque — que es la
+   * que se pinta y con la que se come la arena.
+   */
+  syncCell(): void {
+    this.cx = Math.round(this.px);
+    this.cy = Math.round(this.py);
+  }
+
   clear(_g: Grid): void {
     // Sin cuerpo que borrar.
   }
@@ -82,38 +113,120 @@ export class Ball implements Gadget {
     const g = c.grid;
     // Mientras se arrastra se queda quieta, o se escaparia del dedo.
     if (!this.held) {
+      const prevX = this.px;
+      const prevY = this.py;
       this.px += this.vx * dt;
       this.py += this.vy * dt;
 
-      // Rebote. Se refleja la posicion ademas de invertir la velocidad: dejando
-      // solo la velocidad, un paso largo puede terminar mas alla del borde y la
-      // bola se queda vibrando pegada a el.
-      const lo = BALL_R;
-      const hiX = g.w - 1 - BALL_R;
-      // Por abajo el limite es la zona jugable, no el borde del mundo: las
-      // ultimas filas son el drenaje y la bola taparia esa linea.
-      const hiY = g.h - 1 - RESERVED_ROWS - BALL_R;
-
-      if (this.px < lo) {
-        this.px = lo + (lo - this.px);
-        this.vx = Math.abs(this.vx);
-      } else if (this.px > hiX) {
-        this.px = hiX - (this.px - hiX);
-        this.vx = -Math.abs(this.vx);
-      }
-      if (this.py < lo) {
-        this.py = lo + (lo - this.py);
-        this.vy = Math.abs(this.vy);
-      } else if (this.py > hiY) {
-        this.py = hiY - (this.py - hiY);
-        this.vy = -Math.abs(this.vy);
-      }
+      this.bounceEdges(g);
+      this.bounceWalls(g, prevX, prevY);
+      this.clampInside(g);
 
       this.cx = Math.round(this.px);
       this.cy = Math.round(this.py);
     }
 
     this.devour(g);
+  }
+
+  /** Limites de la zona jugable, en celdas. */
+  private bounds(g: Grid): { lo: number; hiX: number; hiY: number } {
+    return {
+      lo: BALL_R,
+      hiX: g.w - 1 - BALL_R,
+      // Por abajo el limite es la zona jugable, no el borde del mundo: las
+      // ultimas filas son el drenaje y la bola taparia esa linea.
+      hiY: g.h - 1 - RESERVED_ROWS - BALL_R,
+    };
+  }
+
+  private bounceEdges(g: Grid): void {
+    const { lo, hiX, hiY } = this.bounds(g);
+    // Se refleja la posicion ademas de invertir la velocidad: dejando solo la
+    // velocidad, un paso largo puede terminar mas alla del borde y la bola se
+    // queda vibrando pegada a el.
+    if (this.px < lo) {
+      this.px = lo + (lo - this.px);
+      this.vx = Math.abs(this.vx);
+    } else if (this.px > hiX) {
+      this.px = hiX - (this.px - hiX);
+      this.vx = -Math.abs(this.vx);
+    }
+    if (this.py < lo) {
+      this.py = lo + (lo - this.py);
+      this.vy = Math.abs(this.vy);
+    } else if (this.py > hiY) {
+      this.py = hiY - (this.py - hiY);
+      this.vy = -Math.abs(this.vy);
+    }
+  }
+
+  /**
+   * Rebote contra el dibujo del usuario.
+   *
+   * La normal se calcula sumando hacia donde queda el centro de la bola desde
+   * cada celda de pared que la toca. No basta con invertir el eje del
+   * movimiento: casi nadie dibuja lineas rectas horizontales o verticales, y
+   * contra un trazo inclinado esa simplificacion devuelve la bola por donde
+   * vino en vez de desviarla, que es justo la gracia de poder dirigirla.
+   */
+  private bounceWalls(g: Grid, prevX: number, prevY: number): void {
+    const r2 = BALL_R * BALL_R;
+    const cx = Math.round(this.px);
+    const cy = Math.round(this.py);
+    const y0 = Math.max(0, cy - BALL_R);
+    const y1 = Math.min(g.h - 1, cy + BALL_R);
+    const x0 = Math.max(0, cx - BALL_R);
+    const x1 = Math.min(g.w - 1, cx + BALL_R);
+
+    let sx = 0;
+    let sy = 0;
+    let n = 0;
+    for (let y = y0; y <= y1; y++) {
+      const dy = y - cy;
+      for (let x = x0; x <= x1; x++) {
+        const dx = x - cx;
+        if (dx * dx + dy * dy > r2) continue;
+        if (g.mat[g.idx(x, y)] !== WALL) continue;
+        // Vector de la celda hacia el centro: sumados, apuntan hacia afuera.
+        sx -= dx;
+        sy -= dy;
+        n++;
+      }
+    }
+    if (n === 0) return;
+
+    const len = Math.hypot(sx, sy);
+    if (len < 1e-6) {
+      // Sepultada en una masa simetrica de pared: no hay una direccion de
+      // salida mejor que otra, asi que se devuelve por donde vino.
+      this.vx = -this.vx;
+      this.vy = -this.vy;
+      return;
+    }
+
+    const nx = sx / len;
+    const ny = sy / len;
+    const vn = this.vx * nx + this.vy * ny;
+    // Solo si va hacia dentro. Sin esta condicion, una bola que ya se esta
+    // separando se refleja otra vez y se queda pegada al muro temblando.
+    if (vn < 0) {
+      this.vx -= 2 * vn * nx;
+      this.vy -= 2 * vn * ny;
+    }
+    // Vuelve a donde no chocaba y se aparta un poco por la normal. Lo segundo
+    // es lo que la saca cuando la pared ha aparecido encima de ella.
+    this.px = prevX + nx * PUSH_OUT;
+    this.py = prevY + ny * PUSH_OUT;
+  }
+
+  /** El empuje de salida puede haberla sacado del lienzo. */
+  private clampInside(g: Grid): void {
+    const { lo, hiX, hiY } = this.bounds(g);
+    if (this.px < lo) this.px = lo;
+    else if (this.px > hiX) this.px = hiX;
+    if (this.py < lo) this.py = lo;
+    else if (this.py > hiY) this.py = hiY;
   }
 
   /** Se lleva la arena que le cabe dentro. Las paredes dibujadas no se tocan. */
@@ -153,4 +266,97 @@ export class Ball implements Gadget {
     ctx.stroke();
     ctx.restore();
   }
+}
+
+/**
+ * Choque entre bolas.
+ *
+ * Vive fuera de la clase porque no es comportamiento de ninguna bola por
+ * separado: si cada una resolviera su choque por su cuenta, el par se
+ * resolveria dos veces y el intercambio se anularia solo.
+ *
+ * Todas pesan igual, asi que un choque elastico se reduce a intercambiar la
+ * componente de la velocidad a lo largo de la linea que une los centros; la
+ * componente perpendicular no la toca ninguna de las dos.
+ */
+export function resolveBallCollisions(balls: readonly Ball[]): void {
+  const min = BALL_R * 2;
+
+  for (let i = 0; i < balls.length; i++) {
+    for (let j = i + 1; j < balls.length; j++) {
+      const a = balls[i]!;
+      const b = balls[j]!;
+      // Una bola en la mano hace de pared inmovil: no se la puede empujar.
+      if (a.held && b.held) continue;
+
+      let dx = b.px - a.px;
+      let dy = b.py - a.py;
+      let d = Math.hypot(dx, dy);
+      if (d >= min) continue;
+
+      if (d < 1e-6) {
+        // Exactamente superpuestas: no hay linea de centros que valga y hay que
+        // inventarse una o la division de abajo revienta.
+        dx = 1;
+        dy = 0;
+        d = 1;
+      }
+      const nx = dx / d;
+      const ny = dy / d;
+
+      // Separarlas, a partes iguales salvo que una este agarrada.
+      const overlap = min - d;
+      if (a.held) {
+        b.px += nx * overlap;
+        b.py += ny * overlap;
+      } else if (b.held) {
+        a.px -= nx * overlap;
+        a.py -= ny * overlap;
+      } else {
+        a.px -= nx * overlap * 0.5;
+        a.py -= ny * overlap * 0.5;
+        b.px += nx * overlap * 0.5;
+        b.py += ny * overlap * 0.5;
+      }
+
+      // Velocidad relativa a lo largo de la normal. Si es negativa ya se estan
+      // separando —se tocan por un solape que aun se esta deshaciendo— y
+      // rebotar otra vez las dejaria enganchadas.
+      const vn = (a.vx - b.vx) * nx + (a.vy - b.vy) * ny;
+      if (vn <= 0) continue;
+
+      if (!a.held) {
+        a.vx -= vn * nx;
+        a.vy -= vn * ny;
+      }
+      if (!b.held) {
+        b.vx += vn * nx;
+        b.vy += vn * ny;
+      }
+
+      // La direccion sale de la fisica, pero la rapidez se devuelve a su valor
+      // nominal. Un choque de refilon reparte la energia de forma desigual y
+      // puede dejar una bola casi parada; ademas el rebote contra los bordes y
+      // contra el dibujo ya conserva la rapidez, asi que una bola que ademas
+      // frenase al chocar con otra seria de otro material.
+      if (!a.held) renormalize(a);
+      if (!b.held) renormalize(b);
+
+      a.syncCell();
+      b.syncCell();
+    }
+  }
+}
+
+function renormalize(b: Ball): void {
+  const sp = Math.hypot(b.vx, b.vy);
+  if (sp < 1e-6) {
+    const a = Math.random() * TAU;
+    b.vx = Math.cos(a) * SPEED;
+    b.vy = Math.sin(a) * SPEED;
+    return;
+  }
+  const k = SPEED / sp;
+  b.vx *= k;
+  b.vy *= k;
 }

@@ -6,7 +6,7 @@ import { Spinner } from './spinner';
 import { Platform } from './platform';
 import { Bomb } from './bomb';
 import { Emitter } from './emitter';
-import { Ball } from './ball';
+import { Ball, resolveBallCollisions } from './ball';
 
 export type GadgetKind = 'spinner' | 'platform' | 'bomb' | 'emitter' | 'ball';
 
@@ -144,6 +144,14 @@ export class GadgetLayer {
   tick(c: TickCtx, dt: number): void {
     for (const g of this.items) g.clear(c.grid);
     for (const g of this.items) g.tick(c, dt);
+
+    // Los choques entre bolas se resuelven despues de que todas se hayan
+    // movido, y aqui y no dentro de la bola: un choque es de la pareja, no de
+    // ninguna de las dos. Resolviendolo cada una por su cuenta, el par se
+    // trataria dos veces y el intercambio de velocidades se anularia solo.
+    const balls = this.items.filter((g): g is Ball => g instanceof Ball);
+    if (balls.length > 1) resolveBallCollisions(balls);
+
     if (this.items.some((g) => g.dead)) this.items = this.items.filter((g) => !g.dead);
   }
 

@@ -62,7 +62,7 @@ Y una excepción, solo para la bomba: **tocarla la detona** sin esperar a la mec
 | **Plataforma** | Patrulla de izquierda a derecha **llevándose encima** lo que le caiga |
 | **Bomba** | Mecha de 2 s con un anillo que se vacía; revienta un radio de 42 celdas —arena **y paredes**— y se consume |
 | **Fuente** | Un segundo chorro, con su propio color dominante de la paleta |
-| **Bola** | Rebota en los cuatro bordes del lienzo y se come la arena que toca. Atraviesa tus paredes sin tocarlas |
+| **Bola** | Rebota en los bordes, en tus paredes y contra las otras bolas, y se come la arena que toca |
 
 Las piezas van con tamaño y velocidad fijos: no hay ajustes ni panel, igual que no hay selector de
 brocha. Caben diez a la vez; al llegar al tope las fichas del dock se atenúan.
@@ -257,9 +257,24 @@ Cosas que parecen arbitrarias en el código y no lo son:
   de la estructura más corto —las paredes son más recias—, pero entonces el aro punteado del alcance
   estaría mintiendo, que es exactamente por lo que la cruz perdió su llanta dibujada. El aro
   significa "todo lo de aquí dentro se va", y tiene que ser verdad.
-- **La bola rebota en los bordes del lienzo, pero no en las paredes dibujadas.** Es lo contrario de
-  lo que pide el instinto. Sirve para vaciar la pantalla, y una bola que rebotara en el dibujo se
-  quedaría encerrada dentro del primer cuenco que se encontrase y no volvería a limpiar nada.
+- **La bola rebota también contra el dibujo, y encerrarla es parte del juego.** Nació
+  atravesándolo, con el argumento de que si no acabaría atrapada en el primer cuenco y dejaría de
+  limpiar. Era tratarla sólo como una escoba: pudiendo chocar, el trazo pasa a ser la mesa de un
+  pinball —una rampa la desvía, un cuenco la encierra a ricochetear dentro, una pared la manda de
+  vuelta— y dirigirla es la mitad de la gracia. Si se queda encerrada, se saca arrastrándola.
+- **La normal del rebote se calcula sumando de dónde viene la pared, no invirtiendo un eje.**
+  Casi nadie dibuja líneas rectas horizontales o verticales, y contra un trazo inclinado esa
+  simplificación devuelve la bola por donde vino en vez de desviarla, que es justo lo que se busca
+  al poner una rampa. La normal sale de sumar el vector que va de cada celda de pared a su centro.
+- **Sólo se refleja si va hacia dentro** (`v·n < 0`). Sin esa condición, una bola que ya se está
+  separando del muro se refleja otra vez y se queda pegada a él temblando.
+- **Los choques entre bolas se resuelven en la capa, no dentro de la bola.** Un choque es de la
+  pareja, no de ninguna de las dos: si cada una resolviera el suyo por su cuenta, el par se trataría
+  dos veces y el intercambio de velocidades se anularía solo.
+- **La dirección del choque sale de la física, pero la rapidez se devuelve a su valor nominal.** Un
+  choque de refilón reparte la energía de forma desigual y puede dejar una bola casi parada, que ya
+  no limpia nada. Además el rebote contra los bordes y contra el dibujo conserva la rapidez, así que
+  una bola que frenara al chocar con otra sería de otro material.
 - **La bola no tiene cuerpo sólido en el grid.** Podría estamparse como `DYN` para que la arena
   chocara con ella, pero sería trabajo tirado: lo que hay dentro de su radio deja de existir en el
   mismo paso, así que nunca habría nada contra lo que chocar.

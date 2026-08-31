@@ -19,11 +19,15 @@ versionado según [SemVer](https://semver.org/lang/es/).
     mundo —que lleva el sumidero— y los cuerpos de las demás piezas.
   - **Fuente** — un segundo chorro de arena colocable, con su propio color dominante, de modo
     que la cuenca sale estratificada por chorros y no como una papilla uniforme.
-  - **Bola** — rebota en los cuatro bordes del lienzo y se come la arena que toca. Atraviesa
-    las paredes dibujadas sin tocarlas: rebotar en ellas la dejaría encerrada en el primer
-    cuenco que se encontrase. Se pinta del color de las paredes del usuario. Medido: una
-    frena el 39% de lo que suelta la fuente y seis vacían una pantalla llena —de 7.012 a
-    2.454 granos en 18 s— mientras la fuente sigue soltando arena.
+  - **Bola** — rebota en los bordes del lienzo, en las paredes dibujadas y contra las otras
+    bolas, y se come la arena que toca. Se pinta del color de las paredes del usuario.
+    Rebotando en el dibujo, el trazo pasa a ser la mesa de un pinball: una rampa la desvía y
+    un cuenco la encierra a ricochetear dentro. La normal del rebote se calcula sumando de
+    dónde viene la pared, no invirtiendo un eje, para que un trazo inclinado la desvíe en vez
+    de devolverla por donde vino. Entre bolas hay choque elástico de masas iguales, con la
+    rapidez devuelta a su valor nominal para que ninguna se quede parada. Medido: una frena
+    el 39% de lo que suelta la fuente y seis vacían una pantalla llena —de 7.012 a 2.454
+    granos en 18 s— mientras la fuente sigue soltando arena.
 - `fabrica.inspect().donde` lista qué piezas hay y en qué celda. Hace falta porque `dump()`
   ya no lo ve todo: la bola y la fuente no escriben nada en el grid.
 - Tres gestos y ninguno más: arrastrar una ficha coloca, arrastrar una pieza la mueve, y se
