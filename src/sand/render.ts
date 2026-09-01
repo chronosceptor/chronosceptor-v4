@@ -1,6 +1,7 @@
 import type { Grid } from './grid';
 import { EMPTY, IS_MASS, MATERIAL_COUNT, SAND } from './materials';
 import { THEME, packColor } from './palette';
+import { NOZZLE_H } from './world';
 
 /** Contexto de la capa vectorial: `s` son pixeles CSS por celda. */
 export interface DrawCtx {
@@ -9,23 +10,57 @@ export interface DrawCtx {
 }
 
 /**
- * Boquilla de una fuente de material, con la punta en (`x`, `y`).
+ * Tolva de una fuente de material: cuerpo por encima y garganta en (`x`, `y`).
  *
  * Vive aqui y no en el renderer porque la comparten la fuente fija de la escena
  * y las fuentes que el usuario coloca: son la misma cosa y tienen que verse
  * igual, no parecerse.
+ *
+ * Lo importante es donde va respecto a la fila que siembra: **entera por
+ * encima**, y con la garganta justo en esa fila. Antes se pintaba al reves —el
+ * embudo se abria hacia arriba con la boca ancha en la fila de siembra— y
+ * entonces los granos aparecian dentro del embudo, en su parte ancha, como
+ * salidos de la nada; ahora se ve caer el chorro por la garganta, que es de
+ * donde sale.
+ *
+ * `half` es el semiancho real de la siembra, y por eso se pasa en vez de
+ * elegirlo aqui: la garganta dibujada tiene que medir lo que mide el chorro. Un
+ * cano estrecho sobre un chorro ancho es la misma mentira que un aro que no
+ * para nada.
  */
-export function drawNozzle({ ctx, s }: DrawCtx, x: number, y: number): void {
-  ctx.strokeStyle = THEME.structureSoft;
-  ctx.lineWidth = 1;
-  const w = Math.max(8, s * 5);
+export function drawNozzle({ ctx, s }: DrawCtx, x: number, y: number, half: number): void {
   const px = (x + 0.5) * s;
-  const py = y * s;
+  const boca = y * s;
+  // Garganta: el ancho de la siembra, con una celda de holgura a cada lado para
+  // que el chorro salga rozando el cano y no pegado a la linea.
+  const th = (half + 1.5) * s;
+  const alto = NOZZLE_H * s;
+  const ancho = th * 2.6;
+  // Tramo recto de cano antes de la boca. Sin el, las dos paredes se juntan en
+  // punta y la salida no se lee como una salida.
+  const cano = s * 3;
+
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = THEME.structureSoft;
   ctx.beginPath();
-  ctx.moveTo(px - w, py);
-  ctx.lineTo(px - w * 0.22, py + s * 5);
-  ctx.lineTo(px + w * 0.22, py + s * 5);
-  ctx.lineTo(px + w, py);
+  // La boca de arriba, cerrada de lado a lado. Sin esa linea las dos paredes
+  // quedan sueltas en el aire y la pieza se lee como un par de alas, no como
+  // una tolva; es lo unico que la hace reconocible de un vistazo.
+  ctx.moveTo(px - ancho, boca - alto);
+  ctx.lineTo(px + ancho, boca - alto);
+  ctx.moveTo(px - ancho, boca - alto);
+  ctx.lineTo(px - th, boca - cano);
+  ctx.moveTo(px + ancho, boca - alto);
+  ctx.lineTo(px + th, boca - cano);
+  ctx.stroke();
+
+  // El cano, un tono mas claro: es la parte que dice por donde sale.
+  ctx.strokeStyle = THEME.structureLine;
+  ctx.beginPath();
+  ctx.moveTo(px - th, boca - cano);
+  ctx.lineTo(px - th, boca);
+  ctx.moveTo(px + th, boca - cano);
+  ctx.lineTo(px + th, boca);
   ctx.stroke();
 }
 

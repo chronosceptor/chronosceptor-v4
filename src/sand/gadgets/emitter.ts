@@ -49,8 +49,8 @@ const REBIRTH = 2.5;
  * vivia en el mundo (`Emitter.main`). Homologarla salio practicamente gratis y
  * a cambio se arrastra, estorba a las demas y se pinta por el mismo camino que
  * las otras cuatro; antes era un caso aparte que solo sabia estar arriba en el
- * centro. Lo unico que conserva de excepcion es que no ocupa hueco del tope, no
- * se tira a la papelera y no se la lleva una bomba: sin ella no hay arena.
+ * centro. Lo unico que conserva de excepcion es que no ocupa hueco del tope y
+ * que vaciar el lienzo la repone: volarla y tirarla se puede, como a cualquiera.
  */
 export class Emitter implements Gadget {
   readonly kind = 'emitter';
@@ -154,11 +154,11 @@ export class Emitter implements Gadget {
       ctx.save();
       ctx.globalAlpha = 0.12 + 0.88 * (1 - this.dark / REBIRTH);
       ctx.setLineDash([2, 3]);
-      drawNozzle(d, this.cx, this.cy);
+      drawNozzle(d, this.cx, this.cy, this.source.halfWidth);
       ctx.restore();
       return;
     }
-    drawNozzle(d, this.cx, this.cy);
+    drawNozzle(d, this.cx, this.cy, this.source.halfWidth);
     this.wick.drawFuse(d, this.cx, this.cy, GRAB_R);
   }
 }

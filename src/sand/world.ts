@@ -5,6 +5,15 @@ import { mulberry32, randFloat, randInt, type Rng } from './rng';
 
 /** Filas del borde inferior reservadas al drenaje: no se puede dibujar en ellas. */
 export const RESERVED_ROWS = 3;
+/**
+ * Filas que ocupa la tolva de una fuente por encima de la fila que siembra.
+ *
+ * Vive aqui, con la fuente, y no en el render que la pinta, porque manda sobre
+ * dos cosas a la vez: el dibujo y donde puede estar la fuente. La de serie tenia
+ * su boquilla en la fila 0 y una tolva dibujada ahi se sale por arriba de la
+ * pantalla.
+ */
+export const NOZZLE_H = 14;
 
 export interface Profile {
   name: 'desktop' | 'portrait';
@@ -57,7 +66,7 @@ export function profileFor(cssW: number, cssH: number): Profile {
 }
 
 /**
- * La fuente de material, fija en el centro superior.
+ * La fuente de material, arriba en el centro mientras nadie la mueva.
  *
  * Rota el color dominante cada cierto tiempo y en cada cambio de cancion, de
  * modo que lo que cae va tinendose por lotes y los montones que atrape el
@@ -80,7 +89,7 @@ export class Source {
     readonly rate: number,
     private readonly colorPeriod: number,
     private readonly rng: Rng,
-    /** Fila donde siembra. 0 es el borde superior, que es donde va la fija. */
+    /** Fila donde siembra. Su tolva se pinta por encima, ver `NOZZLE_H`. */
     public y = 0,
   ) {}
 
@@ -143,6 +152,11 @@ export function createWorld(cssW: number, cssH: number, fillOverride?: number): 
     profile.rate,
     26,
     mulberry32((Date.now() ^ 0x9e3779b9) >>> 0),
+    // No en la fila 0: su tolva se pinta por encima de la fila que siembra y
+    // ahi arriba no cabria. Un chorro que empieza unas filas mas abajo no se
+    // nota; una fuente sin tolva, si. Las dos filas de mas son aire por encima
+    // de la boca, que pegada al borde parece recortada.
+    NOZZLE_H + 3,
   );
 
   return { grid, source, drain, profile };

@@ -9,9 +9,9 @@
  */
 
 const PIEZAS = [
-  { kind: 'bomb', label: 'Bomba' },
   { kind: 'emitter', label: 'Fuente' },
   { kind: 'ball', label: 'Bola: rebota y se come la arena' },
+  { kind: 'bomb', label: 'Bomba' },
 ] as const;
 ---
 
@@ -21,24 +21,23 @@ const PIEZAS = [
       PIEZAS.map(({ kind, label }) => (
         <button type="button" class="ficha" data-kind={kind} title={label} aria-label={label}>
           <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            {/* Tolva y cano, lo mismo que se pinta en el lienzo: la arena sale
+                por abajo, no aparece dentro del embudo. */}
+            {kind === 'emitter' && (
+              <>
+                <path d="M3.5 4h17M4.6 4l5.6 8.4v2.4M19.4 4l-5.6 8.4v2.4" />
+                <path d="M12 17v1.6M12 20.2v1.5" />
+              </>
+            )}
+            {/* Un circulo y nada mas. La bola es maciza y no hace mas que rodar:
+                las lineas de movimiento que llevaba prometian un efecto que no
+                existe, y con el circulo relleno ya no hay forma de confundirla
+                con la bomba, que va hueca y con mecha. */}
+            {kind === 'ball' && <circle cx="12" cy="12" r="6.4" fill="currentColor" stroke="none" />}
             {kind === 'bomb' && (
               <>
                 <circle cx="11" cy="14.5" r="6.2" />
                 <path d="M15.4 10.1l1.9-1.9M17.3 8.2c.9-1.4 2.2-1.4 3.1-.4" />
-              </>
-            )}
-            {kind === 'emitter' && (
-              <>
-                <path d="M5.5 4.5h13l-4.2 5.4h-4.6z" />
-                <path d="M12 12.4v1.7M12 16.2v1.7M12 20v1.2" />
-              </>
-            )}
-            {/* Bola rellena, no hueca: en el lienzo es maciza, y una ficha con
-                el circulo vacio la haria pasar por un aro. */}
-            {kind === 'ball' && (
-              <>
-                <circle cx="12" cy="12" r="5" fill="currentColor" stroke="none" />
-                <path d="M19.5 4.5l-3 3M4.5 19.5l3-3M19.5 19.5l-3-3M4.5 4.5l3 3" />
               </>
             )}
           </svg>
