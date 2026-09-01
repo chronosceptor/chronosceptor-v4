@@ -36,6 +36,12 @@ La justificación de fondo de cada decisión de física está en el README, secc
   responde con normalidad— pero ningún clic ni arrastre llega al canvas: un trazo de
   Playwright dejó `paredes 0` sin ningún error. Cura antes de medir nada con el ratón:
   `document.querySelectorAll('vite-error-overlay').forEach(o => o.remove())`.
+- **Una captura de elemento de Playwright sobre algo que se mueve solo cuelga el servidor MCP
+  entero, no solo esa llamada.** Pasó con `#dock`, que se autooculta y al que le había puesto un
+  `MutationObserver` para quitarle la clase `reposo`: nunca llegó a estar "quieto", la captura se
+  colgó y con ella toda la sesión de navegador —`browser_close` y `browser_navigate` empezaron a
+  dar timeout—. Para ver el dock, fuérzale `style.opacity` sin observador y captura la página
+  entera.
 - **`astro preview` no funciona con el adaptador de Netlify** (el proceso muere antes de
   escuchar), así que no hay forma fácil de medir contra un build de producción.
 - **Verifica que una edición aterrizó antes de medir nada.** Dos reemplazos de texto con
@@ -82,6 +88,9 @@ La justificación de fondo de cada decisión de física está en el README, secc
   que comparar la ganancia con y sin la pieza en la misma ventana, nunca mirar `sand` a
   secas: la fuente y el drenaje enmascaran la fuga. `inspect().perdidos` no debe subir mientras
   la pieza está puesta.
+- **La tolva de una fuente se pinta por encima de su fila de siembra** (`NOZZLE_H`, en
+  `world.ts`). Una fuente colocada más arriba que eso se queda con la tolva recortada por el borde
+  superior; por eso la de serie no vive en la fila 0.
 - **El dock tiene tres piezas: fuente, bola y bomba.** Hubo una cruz giratoria y una plataforma, y
   se quitaron enteras aunque funcionaban (commit `b52c517`, con lo último que llegaron a hacer:
   colocación en dos tiempos y trayecto inclinado). No las reintroduzcas por tu cuenta.
@@ -99,6 +108,13 @@ Todo desde la consola del navegador, sobre `window.fabrica`:
   pieza sin gestos. Imprescindible para probar con Playwright: los `PointerEvent`
   sintéticos no consiguen `setPointerCapture`, así que un arrastre simulado sobre una ficha
   del dock nunca mueve el fantasma y la pieza acaba en el centro por la ruta del toque.
+  **Las dos `movePlacement` tienen que separarse más de 12 px entre sí**, o el gesto cuenta como
+  toque y la pieza aterriza en el centro de la escena en vez de donde la pediste — se mide muy
+  bien una pieza que no está donde crees.
+- **Sobre `#fx`, en cambio, los `PointerEvent` sintéticos sí funcionan**: dibujar, borrar, agarrar
+  una pieza, arrastrarla y soltarla se prueban con `fx.dispatchEvent(new PointerEvent(...))` y
+  `{clientX, clientY, pointerId: 1, buttons: 1}`. Entre paso y paso hay que dejar correr dos
+  `requestAnimationFrame`: el estado del señalado (la × de quitar) lo fija el pintado, no el evento.
 
 Parámetros de URL: `?debug=1` (overlay), `?mock=1` (canción fija, sin API key),
 `?fill=0.2` (baja el nivel de disparo del drenaje; sin esto, probar la descarga son varios

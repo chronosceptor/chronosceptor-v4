@@ -7,8 +7,23 @@ versionado según [SemVer](https://semver.org/lang/es/).
 
 ### Added
 
+- **La fuente principal se puede volar y quitar como cualquier otra pieza.** Era la única inmune a
+  una bomba, con el argumento de que sin ella el lienzo se queda sin arena; el argumento era malo,
+  porque quien la vuela sabe lo que hace y del dock salen fuentes nuevas. Revienta, deja el lienzo
+  sin chorro dos segundos y medio y se rehace. También se tira a la papelera, y vaciar el lienzo la
+  repone.
+
 ### Changed
 
+- **La fuente se pinta como una tolva de verdad, y la arena sale por su garganta.** El dibujo
+  estaba del revés: la boca ancha del embudo caía en la fila donde siembra, así que los granos
+  aparecían dentro de la tolva, en su parte ancha. Ahora el cuerpo va entero por encima y la
+  garganta —que mide exactamente lo que mide el chorro— justo en la fila de siembra.
+- **El tamaño de la bola es una fracción del ancho del lienzo y no un número de celdas.** En celdas
+  fijas medía 13 en todas partes: el 6% del ancho en escritorio y el 27% en un móvil, que tiene 97
+  celdas de ancho contra 400. Ahora ocupa el 10% en los dos sitios.
+- El dock queda en orden fuente, bola, bomba. La ficha de la bola pierde las líneas de movimiento:
+  prometían un efecto que no existe.
 - **El chorro se abre al caer.** Un grano en caída libre puede desplazarse una celda de lado con
   una probabilidad pequeña. Sin eso la columna medía abajo exactamente lo mismo que en la boquilla
   —medido: 7,9 / 8,6 / 8,3 / 8,5 / 8,1 celdas en las filas 30 a 150, plano y sin tendencia— porque
@@ -23,7 +38,21 @@ versionado según [SemVer](https://semver.org/lang/es/).
 
 ### Fixed
 
+- **La × de quitar una pieza no respondía después de mover esa pieza.** Su posición se fija al
+  señalarla y no se recalculaba al soltarla en otro punto, así que el botón se quedaba donde la
+  pieza estaba antes y pulsar donde se veía la × dibujaba una pared. Se leía como "esta pieza no se
+  puede quitar".
+- **La × de la fuente de serie caía fuera del lienzo.** Vive en la fila 0 y su botón se dibujaba por
+  encima del borde superior: invisible e imposible de acertar. Si arriba no cabe, ahora se pone
+  debajo.
+
 ### Removed
+
+- **Fuera la cruz giratoria y la plataforma.** Las dos funcionaban —la bandeja llegó a subir su
+  carga entera por un trayecto inclinado, y ambas se colocaban en dos tiempos, con un punto para
+  situarlas y otro para darles su medida— y aun así se van: las tres piezas que quedan se explican
+  solas y se combinan entre ellas, y las otras dos pedían entenderlas antes de que hicieran gracia.
+  Quedan enteras en el commit `b52c517`.
 
 ### Security
 
