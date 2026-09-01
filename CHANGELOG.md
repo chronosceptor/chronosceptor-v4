@@ -7,6 +7,18 @@ versionado según [SemVer](https://semver.org/lang/es/).
 
 ### Added
 
+### Changed
+
+### Fixed
+
+### Removed
+
+### Security
+
+## [0.3.0] - 2026-09-01
+
+### Added
+
 - **La fuente principal se puede volar y quitar como cualquier otra pieza.** Era la única inmune a
   una bomba, con el argumento de que sin ella el lienzo se queda sin arena; el argumento era malo,
   porque quien la vuela sabe lo que hace y del dock salen fuentes nuevas. Revienta, deja el lienzo
@@ -53,8 +65,6 @@ versionado según [SemVer](https://semver.org/lang/es/).
   situarlas y otro para darles su medida— y aun así se van: las tres piezas que quedan se explican
   solas y se combinan entre ellas, y las otras dos pedían entenderlas antes de que hicieran gracia.
   Quedan enteras en el commit `b52c517`.
-
-### Security
 
 ## [0.2.0] - 2026-09-01
 
