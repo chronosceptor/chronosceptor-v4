@@ -9,6 +9,18 @@ versionado según [SemVer](https://semver.org/lang/es/).
 
 ### Changed
 
+- **El chorro se abre al caer.** Un grano en caída libre puede desplazarse una celda de lado con
+  una probabilidad pequeña. Sin eso la columna medía abajo exactamente lo mismo que en la boquilla
+  —medido: 7,9 / 8,6 / 8,3 / 8,5 / 8,1 celdas en las filas 30 a 150, plano y sin tendencia— porque
+  los granos nacen con velocidad horizontal cero y `Grid.vel` sólo sabe de caída vertical. Se leía
+  como una cortina rígida bajando y no como un vertido. Es la única rama que se le ha añadido nunca
+  al bucle caliente de `physics.ts`, y cuesta un `rand()` por grano en vuelo y por frame: la
+  simulación pasa de 1,07 a 1,13 ms con la escena cargada, de un presupuesto de 16,7.
+- La bola muerde algo más fuerte: a plena fuerza el núcleo del mordisco se va entero, que es la
+  diferencia entre mellar una pared y romperla. Antes quedaban celdas sueltas en el centro que
+  volvían a hacer de pared. Medido sobre el mismo cuenco, 12 s: ~50 celdas de media (46, 61 y 42 en
+  tres pasadas) frente a 39.
+
 ### Fixed
 
 ### Removed

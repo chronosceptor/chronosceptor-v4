@@ -167,6 +167,18 @@ Cosas que parecen arbitrarias en el código y no lo son:
   montones quedan estratificados.
 - **Los granos asentados se duermen** y solo los revive un cambio en su vecindario 3x3. Es lo que
   hace que un montón grande y quieto cueste casi nada.
+- **Un grano en caída libre puede irse una celda de lado.** Sin eso el chorro no se abre nunca: los
+  granos nacen con velocidad horizontal cero y `Grid.vel` sólo sabe de caída vertical, así que la
+  columna mide abajo exactamente lo mismo que en la boquilla. Medido: 7,9 / 8,6 / 8,3 / 8,5 / 8,1
+  celdas de ancho en las filas 30 a 150 — plano, sin la menor tendencia. Se lee como una cortina
+  rígida bajando, no como un vertido. La deriva va en la caída y no en la fuente a propósito: que un
+  grano cayendo pueda desviarse es de la caída, no de quien lo suelta. Cuesta un `rand()` por grano
+  **en vuelo** y por frame —los asentados duermen—: 1,07 → 1,13 ms de simulación con la escena
+  cargada, de un presupuesto de 16,7.
+- **El margen útil de esa deriva es estrecho, y se mide por dispersión y no por ancho.** El ancho
+  mín-máx de una fila lo fijan dos granos sueltos; la desviación típica de la x dice lo que se ve.
+  Arranca en 2,6 celdas por el ancho de la boquilla: con 0,25 apenas se despega de ahí y no se nota,
+  y con 0,6 llega a 6,8 en la fila 150 pero deja de leerse como un chorro y parece rociado disperso.
 - **`/api/art` recibe la ruta relativa del CDN, nunca una URL.** El host es una constante del
   servidor, así que el endpoint no puede convertirse en proxy abierto.
 - **Las credenciales se declaran como secretos de `astro:env`, no se leen con `import.meta.env`.**
@@ -209,9 +221,10 @@ Cosas que parecen arbitrarias en el código y no lo son:
   sobre la lista, y no es estilo: en un solo recorrido, una pieza borraría el cuerpo recién escrito
   de la que va detrás, y dos piezas que se tocan parpadearían y dejarían pasar la arena por la
   junta.
-- **`physics.ts` no se tocó.** Las piezas no añaden ni una rama al bucle caliente del autómata: la
-  cruz funciona por el desplazamiento que ya hacía `Grid.stamp()`, y la plataforma traslada su carga
-  por su cuenta.
+- **Ninguna pieza toca `physics.ts`.** La cruz funciona por el desplazamiento que ya hacía
+  `Grid.stamp()`, y la plataforma traslada su carga por su cuenta. La única rama que se le ha
+  añadido nunca al bucle caliente es la deriva lateral de la caída libre, que no es de ninguna pieza
+  sino de la caída misma (ver abajo).
 - **La plataforma traslada su carga a mano, y hubo que llegar hasta ahí por descarte.** Primero fue
   una barra sólida y se escurría por debajo del montón: el suelo se retira de la celda que abandona
   y lo que había encima se cuela por el hueco. Después fue material de cinta (`BELT_L`/`BELT_R`),

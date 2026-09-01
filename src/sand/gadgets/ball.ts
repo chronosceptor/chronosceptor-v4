@@ -46,8 +46,13 @@ const BITE_R = 5;
 /**
  * Cuanto se lleva un golpe de frente a plena velocidad, como fraccion de las
  * celdas del mordisco. El resto de golpes salen de ahi hacia abajo.
+ *
+ * A 1 el nucleo del mordisco se va entero en un golpe de frente, y esa es la
+ * diferencia entre mellar una pared y romperla: con 0,8 un trazo grueso
+ * aguantaba muchos impactos porque cada uno dejaba celdas sueltas en el centro
+ * que volvian a hacer de pared.
  */
-const BITE_P = 0.8;
+const BITE_P = 1;
 
 /**
  * Bola que rebota y se come la arena que toca.

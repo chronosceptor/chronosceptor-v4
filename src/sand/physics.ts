@@ -9,6 +9,29 @@ import {
  * puede rellenar y deja de leerse como un hilo continuo.
  */
 const MAX_VEL = 3;
+/**
+ * Probabilidad de que un grano en caida libre se desplace una celda de lado.
+ *
+ * Sin esto el chorro no se abre nunca: los granos nacen con velocidad
+ * horizontal cero y `vel` solo sabe de caida vertical, asi que la columna mide
+ * abajo exactamente lo mismo que en la boquilla —medido: 10 celdas en la fila
+ * 20, 10 en la 100— y se lee como una cortina rigida bajando, no como un
+ * vertido. Con la deriva el ancho crece con la raiz de la distancia, que es
+ * como se abre un chorro de verdad.
+ *
+ * Es la unica rama que se le ha anadido nunca al bucle caliente, y va aqui y no
+ * en la fuente a proposito: que un grano cayendo pueda irse de lado es de la
+ * caida, no de quien lo suelta. Cuesta un `rand()` por grano **en vuelo** y por
+ * frame, no por grano: los asentados duermen. Medido con la escena cargada,
+ * 1,07 -> 1,13 ms de simulacion de un presupuesto de 16,7.
+ *
+ * El valor es una perilla de gusto y el margen util es estrecho. Medido por la
+ * desviacion tipica de la x de los granos, que arranca en 2,6 celdas por el
+ * ancho de la boquilla: con 0,25 apenas se despega de ahi y no se nota; con 0,6
+ * llega a 6,8 en la fila 150 pero deja de leerse como un chorro y pasa a
+ * parecer rociado disperso. 0,4 abre lo justo para que se vea caer.
+ */
+const DRIFT_P = 0.4;
 /** Pasos diagonales que da un grano por frame sobre una rampa. */
 const CHUTE_STEPS = 3;
 /** Probabilidad de que un grano atraviese una criba en un frame dado. */
@@ -79,7 +102,16 @@ export function step(g: Grid, rand: () => number, frame: number): void {
           if (ty >= h || mat[ty * w + x] !== EMPTY) break;
           ny = ty;
         }
-        const dst = ny * w + x;
+        // Deriva lateral. Se prueba sobre la celda de destino ya calculada, de
+        // modo que la caida manda y el desvio solo ocurre si hay hueco: un
+        // grano que baja por una rendija estrecha sigue bajando recto.
+        let nx = x;
+        if (rand() < DRIFT_P) {
+          const tx = x + (rand() < 0.5 ? -1 : 1);
+          if (tx >= 0 && tx < w && mat[ny * w + tx] === EMPTY) nx = tx;
+        }
+
+        const dst = ny * w + nx;
         mat[dst] = SAND;
         col[dst] = col[i]!;
         vel[dst] = v;
@@ -89,7 +121,7 @@ export function step(g: Grid, rand: () => number, frame: number): void {
         col[i] = 0;
         vel[i] = 0;
         g.wake(x, y);
-        g.wake(x, ny);
+        g.wake(nx, ny);
         continue;
       }
 
