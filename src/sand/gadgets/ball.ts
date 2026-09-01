@@ -8,22 +8,39 @@ import type { Blast, Gadget, TickCtx } from './index';
 
 const TAU = Math.PI * 2;
 /**
- * Radio de la bola, en celdas. Es tambien el ancho de lo que borra a su paso.
+ * Radio de la bola como fraccion del ancho del lienzo, y sus topes en celdas.
  *
- * Lo que barre por segundo va con el radio por la rapidez, asi que estos dos
- * numeros son los que deciden si la bola limpia de verdad o solo hace cosquillas.
- * Con radio 7 y 90 celdas/s, tres bolas apenas frenaban el 41% de lo que suelta
- * la fuente: la pantalla se seguia llenando y no se parecia en nada a limpiarla.
+ * Es lo unico de la pieza que no puede ir en celdas fijas. En celdas, la bola
+ * media lo mismo en todas partes —13— y eso en un movil es enorme: el lienzo
+ * vertical tiene unas 97 celdas de ancho contra las 400 del de escritorio, asi
+ * que los 26 de diametro pasaban de ocupar el 6% del ancho a ocupar el 27%. La
+ * misma pieza se comia media pantalla solo por cambiar de dispositivo.
+ *
+ * Atada al ancho, ocupa la misma porcion de escena en los dos sitios, que es
+ * lo que hace que se comporte igual: lo que barre por segundo, en fraccion de
+ * lienzo, deja de depender del aparato.
+ *
+ * Lo que barre va con el radio por la rapidez, asi que el suelo esta puesto
+ * donde deja de limpiar: con radio 7 y 90 celdas/s, tres bolas apenas frenaban
+ * el 41% de lo que suelta la fuente.
  */
-const BALL_R = 13;
+const R_FRAC = 0.025;
+const R_MIN = 5;
+const R_MAX = 11;
+
+/** Radio en celdas para un lienzo de este ancho. */
+export function ballRadius(gridW: number): number {
+  return Math.max(R_MIN, Math.min(R_MAX, Math.round(gridW * R_FRAC)));
+}
+
 /**
- * Radio de agarre, mayor que la bola.
+ * Holgura del agarre por encima de la bola, en celdas.
  *
- * Generoso a proposito: a esta velocidad la bola cruza el punto donde esta el
+ * Generosa a proposito: a esta velocidad la bola cruza el punto donde esta el
  * cursor en una decima de segundo, y con un objetivo del tamano justo de la
  * bola no habria manera humana de cogerla para moverla o tirarla.
  */
-const GRAB_R = 18;
+const GRAB_EXTRA = 5;
 /** Rapidez, en celdas/s. Constante: no hay gravedad ni rozamiento. */
 const SPEED = 145;
 /**
@@ -34,7 +51,8 @@ const SPEED = 145;
  */
 const PUSH_OUT = 1.5;
 /**
- * Radio del mordisco que cada golpe arranca de la pared, en celdas.
+ * Radio del mordisco que cada golpe arranca de la pared, como fraccion del
+ * radio de la bola.
  *
  * Muy por debajo del radio de la bola a proposito. Llevandose de un tajo todas
  * las celdas que toca —que es lo que sale solo, porque ya estan contadas para
@@ -42,7 +60,7 @@ const PUSH_OUT = 1.5;
  * lo atraviesa y se acaba el pinball: el dibujo dejaria de desviarla justo
  * cuando empiezas a usarlo para dirigirla.
  */
-const BITE_R = 5;
+const BITE_FRAC = 0.4;
 /**
  * Cuanto se lleva un golpe de frente a plena velocidad, como fraccion de las
  * celdas del mordisco. El resto de golpes salen de ahi hacia abajo.
@@ -85,9 +103,13 @@ const BITE_P = 1;
  */
 export class Ball implements Gadget {
   readonly kind = 'ball';
-  readonly radius = GRAB_R;
+  /** Radio de la bola, en celdas. Sale del ancho del lienzo. Ver `R_FRAC`. */
+  readonly r: number;
+  readonly radius: number;
   /** Lo que ocupa de verdad es la bola, no la holgura para poder cogerla. */
-  readonly footprint = BALL_R;
+  readonly footprint: number;
+  /** Radio del mordisco, proporcional al de la bola. */
+  private readonly bite: number;
   dead = false;
   held = false;
 
@@ -110,7 +132,13 @@ export class Ball implements Gadget {
   constructor(
     public cx: number,
     public cy: number,
+    /** Ancho del lienzo en celdas: de ahi sale el tamano. Ver `R_FRAC`. */
+    gridW = 400,
   ) {
+    this.r = ballRadius(gridW);
+    this.radius = this.r + GRAB_EXTRA;
+    this.footprint = this.r;
+    this.bite = Math.max(2, Math.round(this.r * BITE_FRAC));
     this.px = cx;
     this.py = cy;
     // Un angulo lejos de la horizontal y de la vertical. Saliendo casi recta,
@@ -146,7 +174,7 @@ export class Ball implements Gadget {
   }
 
   ignite(b: Blast): void {
-    this.wick.ignite(b, this.px, this.py, BALL_R);
+    this.wick.ignite(b, this.px, this.py, this.r);
   }
 
   /** Toque: si esta encendida, revienta ya. Apagada no hace nada. */
@@ -187,11 +215,11 @@ export class Ball implements Gadget {
   /** Limites de la zona jugable, en celdas. */
   private bounds(g: Grid): { lo: number; hiX: number; hiY: number } {
     return {
-      lo: BALL_R,
-      hiX: g.w - 1 - BALL_R,
+      lo: this.r,
+      hiX: g.w - 1 - this.r,
       // Por abajo el limite es la zona jugable, no el borde del mundo: las
       // ultimas filas son el drenaje y la bola taparia esa linea.
-      hiY: g.h - 1 - RESERVED_ROWS - BALL_R,
+      hiY: g.h - 1 - RESERVED_ROWS - this.r,
     };
   }
 
@@ -233,13 +261,13 @@ export class Ball implements Gadget {
    */
   private bounceWalls(c: TickCtx, prevX: number, prevY: number): void {
     const g = c.grid;
-    const r2 = BALL_R * BALL_R;
+    const r2 = this.r * this.r;
     const cx = Math.round(this.px);
     const cy = Math.round(this.py);
-    const y0 = Math.max(0, cy - BALL_R);
-    const y1 = Math.min(g.h - 1, cy + BALL_R);
-    const x0 = Math.max(0, cx - BALL_R);
-    const x1 = Math.min(g.w - 1, cx + BALL_R);
+    const y0 = Math.max(0, cy - this.r);
+    const y1 = Math.min(g.h - 1, cy + this.r);
+    const x0 = Math.max(0, cx - this.r);
+    const x1 = Math.min(g.w - 1, cx + this.r);
 
     let sx = 0;
     let sy = 0;
@@ -305,20 +333,20 @@ export class Ball implements Gadget {
    * no son suyos y ademas se reescriben solos cada paso.
    */
   private chip(g: Grid, atX: number, atY: number, force: number, rand: () => number): void {
-    const y0 = Math.max(0, Math.floor(atY - BITE_R));
-    const y1 = Math.min(g.h - 1, Math.ceil(atY + BITE_R));
-    const x0 = Math.max(0, Math.floor(atX - BITE_R));
-    const x1 = Math.min(g.w - 1, Math.ceil(atX + BITE_R));
+    const y0 = Math.max(0, Math.floor(atY - this.bite));
+    const y1 = Math.min(g.h - 1, Math.ceil(atY + this.bite));
+    const x0 = Math.max(0, Math.floor(atX - this.bite));
+    const x1 = Math.min(g.w - 1, Math.ceil(atX + this.bite));
 
     for (let y = y0; y <= y1; y++) {
       const dy = y - atY;
       for (let x = x0; x <= x1; x++) {
         const dx = x - atX;
         const d = Math.hypot(dx, dy);
-        if (d > BITE_R) continue;
+        if (d > this.bite) continue;
         const i = g.idx(x, y);
         if (g.mat[i] !== WALL) continue;
-        if (rand() < force * BITE_P * (1 - d / (BITE_R + 1))) g.removeAt(i);
+        if (rand() < force * BITE_P * (1 - d / (this.bite + 1))) g.removeAt(i);
       }
     }
     // Lo que aguantaba encima de lo que se acaba de ir tiene que desplomarse.
@@ -336,11 +364,11 @@ export class Ball implements Gadget {
 
   /** Se lleva la arena que le cabe dentro. Las paredes dibujadas no se tocan. */
   private devour(g: Grid): void {
-    const r2 = BALL_R * BALL_R;
-    const y0 = Math.max(0, this.cy - BALL_R);
-    const y1 = Math.min(g.h - 1, this.cy + BALL_R);
-    const x0 = Math.max(0, this.cx - BALL_R);
-    const x1 = Math.min(g.w - 1, this.cx + BALL_R);
+    const r2 = this.r * this.r;
+    const y0 = Math.max(0, this.cy - this.r);
+    const y1 = Math.min(g.h - 1, this.cy + this.r);
+    const x0 = Math.max(0, this.cx - this.r);
+    const x1 = Math.min(g.w - 1, this.cx + this.r);
 
     for (let y = y0; y <= y1; y++) {
       const dy = y - this.cy;
@@ -373,7 +401,7 @@ export class Ball implements Gadget {
     ctx.strokeStyle = THEME.structureLine;
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.arc(cx, cy, BALL_R * s, 0, TAU);
+    ctx.arc(cx, cy, this.r * s, 0, TAU);
     ctx.fill();
     ctx.stroke();
 
@@ -383,7 +411,7 @@ export class Ball implements Gadget {
     // alcance y el arco de mecha que se vacia. Una bola encendida es una bomba,
     // y tiene que avisar de lo que se va a llevar con el mismo idioma — sobre
     // todo esta, que ademas lo lleva paseando por el lienzo.
-    this.wick.drawFuse(d, this.cx, this.cy, BALL_R);
+    this.wick.drawFuse(d, this.cx, this.cy, this.r);
   }
 }
 
@@ -399,8 +427,6 @@ export class Ball implements Gadget {
  * componente perpendicular no la toca ninguna de las dos.
  */
 export function resolveBallCollisions(balls: readonly Ball[]): void {
-  const min = BALL_R * 2;
-
   for (let i = 0; i < balls.length; i++) {
     for (let j = i + 1; j < balls.length; j++) {
       const a = balls[i]!;
@@ -408,6 +434,11 @@ export function resolveBallCollisions(balls: readonly Ball[]): void {
       // Una bola en la mano hace de pared inmovil: no se la puede empujar.
       if (a.held && b.held) continue;
 
+      // La distancia minima es la suma de los radios y no el doble de una
+      // constante: el tamano de la bola sale del ancho del lienzo, asi que dos
+      // bolas de la misma escena miden lo mismo pero no hay ningun numero fijo
+      // que lo diga.
+      const min = a.r + b.r;
       let dx = b.px - a.px;
       let dy = b.py - a.py;
       let d = Math.hypot(dx, dy);

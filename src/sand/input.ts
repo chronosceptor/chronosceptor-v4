@@ -1,6 +1,6 @@
 import type { Point } from './draw';
 
-export type StrokeMode = 'draw' | 'erase' | 'gadget';
+export type StrokeMode = 'draw' | 'erase' | 'gadget' | 'size';
 
 export interface InputHooks {
   /** Pixeles CSS del elemento a coordenadas de celda. */
@@ -21,6 +21,19 @@ export interface InputHooks {
    * mirar la papelera y la pieza decide que hacer (la bomba, detonar).
    */
   drop?(cell: Point, clientX: number, clientY: number, tap: boolean): void;
+
+  /**
+   * Hay una pieza recien soltada esperando su segundo punto.
+   *
+   * Mientras eso dure, el lienzo entero es el gesto de esa pieza: el puntero le
+   * da el tamano y el siguiente clic lo fija. Nada de dibujar ni de agarrar,
+   * que es lo que haria el mismo gesto un segundo antes.
+   */
+  sizing?(): boolean;
+  /** Vista previa del tamano con el puntero, sin apretar nada. */
+  sizeTo?(cell: Point): void;
+  /** El clic que lo deja fijado. */
+  commitSize?(cell: Point): void;
 }
 
 /** Recorrido y duracion por debajo de los cuales un gesto cuenta como toque. */
@@ -94,6 +107,20 @@ export class Input {
     this.origin = cell;
     this.originT = performance.now();
 
+    // La pieza a medio colocar gana a todo lo demas: con una esperando su
+    // segundo punto, este gesto es ese punto y no un trazo ni un agarre. Con el
+    // raton el tamano ya se ve en el fantasma y basta el clic; con el dedo no
+    // hay fantasma que ver hasta que se toca, asi que el mismo gesto sirve de
+    // arrastre para ajustar y se fija al levantar.
+    if (this.hooks.sizing?.()) {
+      this.mode = 'size';
+      this.active = true;
+      this.last = cell;
+      this.capture(e);
+      this.hooks.sizeTo?.(cell);
+      return;
+    }
+
     // Una pieza colocada gana al trazo: si el gesto empieza encima de una, lo
     // que se quiere es moverla, no dibujar una pared sobre ella. Es la unica
     // decision nueva del gesto; todo lo de abajo sigue igual que antes.
@@ -134,7 +161,18 @@ export class Input {
 
   private move(e: PointerEvent): void {
     if (!this.active) {
-      this.local(e);
+      const cell = this.local(e);
+      // El tamano se previsualiza tambien sin el boton apretado: la pieza esta
+      // soltada y a la espera, y verla crecer siguiendo al puntero es lo unico
+      // que cuenta que falta un clic.
+      if (this.hooks.sizing?.()) this.hooks.sizeTo?.(cell);
+      return;
+    }
+
+    if (this.mode === 'size') {
+      const cell = this.local(e);
+      this.last = cell;
+      this.hooks.sizeTo?.(cell);
       return;
     }
 
@@ -160,6 +198,12 @@ export class Input {
   }
 
   private up(cancelled = false): void {
+    if (this.mode === 'size' && this.active) {
+      const cell = this.last ?? this.origin;
+      if (cell) this.hooks.commitSize?.(cell);
+      this.mode = 'draw';
+    }
+
     if (this.mode === 'gadget' && this.active) {
       const cell = this.last ?? this.origin;
       // Un gesto que apenas se movio y duro poco es un toque, no un arrastre.

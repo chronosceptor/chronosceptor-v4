@@ -8,22 +8,53 @@ import type { Blast, Gadget, TickCtx } from './index';
 const TAU = Math.PI * 2;
 const BLADES = 4;
 /**
- * Radio de las aspas, en celdas.
+ * Radio de las aspas, en celdas: el de partida y los topes entre los que lo
+ * mueve el segundo punto del gesto de colocacion.
  *
- * Grande a proposito: una cruz pequena solo desvia el hilo que le cae justo
- * encima y apenas se nota. A este tamano barre una porcion de escena de verdad.
+ * El de partida es grande a proposito: una cruz pequena solo desvia el hilo que
+ * le cae justo encima y apenas se nota. El minimo existe por lo mismo — una
+ * cruz de dos celdas no para nada—, y el maximo, porque el radio es tambien el
+ * sitio que la pieza reserva y una cruz enorme no dejaria colocar nada cerca.
+ *
+ * Los dos van en fraccion del ancho del lienzo, como el tamano de la bola y el
+ * de la bandeja: en celdas fijas, las 20 de partida son el 10% del ancho en
+ * escritorio y el 41% en un movil, que tiene 97 celdas contra 400. Las celdas
+ * de escritorio se conservan tal cual — es donde estan calibradas.
  */
+const R_FRAC = 0.05;
 export const SPINNER_R = 20;
+const MIN_R = 6;
+/**
+ * Y el maximo, tambien en fraccion del ancho: en un lienzo de movil, una cruz
+ * de 40 celdas de radio no cabria de lado a lado.
+ */
+const MAX_FRAC = 0.1;
+const MAX_R = 40;
+const MAX_MIN = 14;
+
+/** Radio de partida y tope, en celdas, para un lienzo de este ancho. */
+function radios(gridW: number): { r0: number; max: number } {
+  return {
+    r0: Math.max(MIN_R + 2, Math.min(SPINNER_R, Math.round(gridW * R_FRAC))),
+    max: Math.max(MAX_MIN, Math.min(MAX_R, Math.round(gridW * MAX_FRAC))),
+  };
+}
 /** Radio del cubo. Sin el, la arena se cuela hasta el eje y se atasca ahi. */
 const HUB_R = 2;
 /**
- * Velocidad angular, en rad/s.
+ * Rapidez de la punta del aspa, en celdas/s.
  *
- * La punta recorre OMEGA * R = 24 celdas/s, o 0,4 celdas por frame: menos de
- * una celda, asi que ningun aspa se teletransporta al otro lado de un grano.
- * Subirla por encima de ~5 rad/s empieza a atravesar arena sin tocarla.
+ * Lo que se fija es esto y no la velocidad angular, porque el tamano ahora lo
+ * elige quien coloca la pieza. La punta recorre 44/60 = 0,73 celdas por frame:
+ * menos de una, asi que ningun aspa se teletransporta al otro lado de un grano.
+ * Con una omega fija de 2,2 rad/s, una cruz de 40 celdas llevaria la punta a 88
+ * celdas/s —1,5 celdas por frame— y empezaria a atravesar arena sin tocarla.
+ * A cambio, la cruz grande gira mas despacio, que es justo lo que uno espera de
+ * algo mas grande.
  */
-const OMEGA = 2.2;
+const TIP_SPEED = 44;
+/** Tope de velocidad angular: la cruz pequena no tiene por que ser un ventilador. */
+const MAX_OMEGA = 2.6;
 
 /**
  * Cruz giratoria.
@@ -38,7 +69,13 @@ const OMEGA = 2.2;
  */
 export class Spinner implements Gadget {
   readonly kind = 'spinner';
-  readonly radius = SPINNER_R;
+  /**
+   * Radio de las aspas, y a la vez el sitio que reserva y el agarre. Lo fija el
+   * segundo punto del gesto al colocarla, asi que no es `readonly`.
+   */
+  radius: number;
+  /** Tope al que puede llegar el segundo punto del gesto. Sale del lienzo. */
+  private readonly maxR: number;
   dead = false;
   private angle = 0;
   /** Apagada mientras nada le estalle al lado. Una bomba se la lleva. */
@@ -49,8 +86,14 @@ export class Spinner implements Gadget {
   constructor(
     public cx: number,
     public cy: number,
+    /** Ancho del lienzo en celdas: de ahi sale el tamano. Ver `R_FRAC`. */
+    gridW = 400,
     private readonly dir: 1 | -1 = 1,
-  ) {}
+  ) {
+    const { r0, max } = radios(gridW);
+    this.radius = r0;
+    this.maxR = max;
+  }
 
   clear(g: Grid): void {
     if (!this.box) return;
@@ -66,7 +109,25 @@ export class Spinner implements Gadget {
   }
 
   ignite(b: Blast): void {
-    this.wick.ignite(b, this.cx, this.cy, SPINNER_R);
+    this.wick.ignite(b, this.cx, this.cy, this.radius);
+  }
+
+  /**
+   * Segundo punto del gesto de colocacion: el radio es la distancia al centro.
+   *
+   * Se recorta a los topes y despues se va bajando hasta que quepa. Parar de
+   * crecer al tocar a la vecina es mejor que rechazar el gesto entero: se ve
+   * donde esta el limite en vez de descubrir que el clic no ha hecho nada.
+   */
+  resize(x: number, y: number, fits: (cx: number, cy: number, r: number) => boolean): void {
+    const want = Math.min(this.maxR, Math.max(MIN_R, Math.round(Math.hypot(x - this.cx, y - this.cy))));
+    for (let r = want; r > MIN_R; r--) {
+      if (fits(this.cx, this.cy, r)) {
+        this.radius = r;
+        return;
+      }
+    }
+    this.radius = MIN_R;
   }
 
   tick(c: TickCtx, dt: number): void {
@@ -80,7 +141,8 @@ export class Spinner implements Gadget {
     // acaba de llevar serian justo lo contrario de lo que ha pasado.
     if (paso === 'humo') return;
 
-    this.angle = (this.angle + this.dir * OMEGA * dt) % TAU;
+    const omega = Math.min(MAX_OMEGA, TIP_SPEED / this.radius);
+    this.angle = (this.angle + this.dir * omega * dt) % TAU;
     const g = c.grid;
     g.stampDisc(this.cx, this.cy, HUB_R, DYN);
 
@@ -90,17 +152,17 @@ export class Spinner implements Gadget {
       const sa = Math.sin(a);
       // A medio paso: con paso entero un aspa casi horizontal deja huecos por
       // los que se cuela la arena en vez de recibir el golpe.
-      for (let t = HUB_R; t <= SPINNER_R; t += 0.5) {
+      for (let t = HUB_R; t <= this.radius; t += 0.5) {
         const y = Math.round(this.cy + sa * t);
         g.stamp(Math.round(this.cx + ca * t), y, DYN, this.push(y));
       }
     }
 
     this.box = [
-      this.cx - SPINNER_R - 1,
-      this.cy - SPINNER_R - 1,
-      this.cx + SPINNER_R + 1,
-      this.cy + SPINNER_R + 1,
+      this.cx - this.radius - 1,
+      this.cy - this.radius - 1,
+      this.cx + this.radius + 1,
+      this.cy + this.radius + 1,
     ];
     g.wakeRect(this.box[0], this.box[1], this.box[2], this.box[3]);
   }
@@ -133,7 +195,7 @@ export class Spinner implements Gadget {
 
     const cx = (this.cx + 0.5) * s;
     const cy = (this.cy + 0.5) * s;
-    const r = (SPINNER_R + 0.5) * s;
+    const r = (this.radius + 0.5) * s;
     ctx.strokeStyle = THEME.structureLine;
     ctx.lineWidth = 1;
 
@@ -155,6 +217,6 @@ export class Spinner implements Gadget {
     ctx.arc(cx, cy, Math.max(1.5, HUB_R * s * 0.6), 0, TAU);
     ctx.stroke();
 
-    this.wick.drawFuse(d, this.cx, this.cy, SPINNER_R);
+    this.wick.drawFuse(d, this.cx, this.cy, this.radius);
   }
 }

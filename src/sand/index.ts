@@ -6,7 +6,7 @@ import { Input } from './input';
 import { DEFAULT_PALETTE, THEME, type Palette } from './palette';
 import { mulberry32 } from './rng';
 import { Ejecta } from './ejecta';
-import { createGadget, GadgetLayer, type Gadget, type GadgetKind } from './gadgets';
+import { createGadget, GadgetLayer, isSizable, type Gadget, type GadgetKind } from './gadgets';
 import { Emitter } from './gadgets/emitter';
 
 export interface BootOptions {
@@ -60,7 +60,7 @@ export interface SandApp {
     msRender: number;
     despiertas: number;
     piezas: number;
-    donde: Array<{ kind: string; x: number; y: number }>;
+    donde: Array<{ kind: string; x: number; y: number; r: number }>;
     ejecta: number;
     perdidos: number;
   };
@@ -123,6 +123,25 @@ export function boot(opts: BootOptions): SandApp {
   let ghostMoved = false;
 
   /**
+   * La pieza recien soltada que espera su segundo punto.
+   *
+   * Ya esta colocada y funcionando —gira, patrulla—: lo unico que le falta es
+   * el tamano, y hasta que el siguiente clic lo fije el puntero se lo va dando.
+   * Colocarla de verdad desde el primer momento en vez de dejarla en fantasma
+   * es lo que hace que no se pueda perder: si el gesto se queda a medias, lo
+   * que queda es una pieza con el tamano de partida, que es exactamente lo que
+   * habia antes de que hubiera dos tiempos.
+   */
+  let sizing: Gadget | null = null;
+  /**
+   * Le da a la pieza el tamano que pide el punto, con la regla de colocacion de
+   * la escena en la mano. Se ignora a si misma: si no, no cabria en su sitio.
+   */
+  const sizeTo = (c: Point): void => {
+    sizing?.resize?.(c.x, c.y, (cx, cy, r) => canPlace(cx, cy, r, sizing));
+  };
+
+  /**
    * Ultimo numero de piezas comunicado al dock.
    *
    * El aviso se deduce de comparar el contador, no de acordarse de llamarlo en
@@ -164,7 +183,23 @@ export function boot(opts: BootOptions): SandApp {
 
   function badgeAt(g: Gadget): Point {
     const d = g.radius + 4;
-    return { x: Math.round(g.cx + d * 0.707), y: Math.round(g.cy - d * 0.707) };
+    // Hay piezas que lo saben mejor: en una bandeja larga y baja, la diagonal
+    // del radio cae muy por encima de ella, en mitad de la nada.
+    const p = g.badgeAt
+      ? g.badgeAt()
+      : { x: Math.round(g.cx + d * 0.707), y: Math.round(g.cy - d * 0.707) };
+
+    // Y donde no se pueda pulsar, no vale. La fuente de serie vive en la fila 0
+    // y su × caia por encima del borde superior: invisible e imposible de
+    // acertar, justo la pieza de la que mas gente quiere deshacerse. Si arriba
+    // no cabe, se pone debajo.
+    const { w, h } = world.grid;
+    const r = Math.ceil(BADGE_R);
+    if (p.y < r) p.y = Math.round(g.cy + d * 0.707);
+    return {
+      x: Math.max(r, Math.min(w - 1 - r, p.x)),
+      y: Math.max(r, Math.min(h - 1 - r, p.y)),
+    };
   }
   function overBadge(c: Point): boolean {
     if (!badge) return false;
@@ -259,6 +294,15 @@ export function boot(opts: BootOptions): SandApp {
       // tiene que reclamar el gesto: si no, pulsarlo dibujaria una pared.
       hasGadget: (c) => gadgets.hit(c.x, c.y) !== null || overBadge(c),
 
+      sizing: () => sizing !== null,
+      sizeTo,
+      commitSize: (c) => {
+        sizeTo(c);
+        sizing = null;
+        // La pieza ha cambiado de tamano: su × ya no va donde iba.
+        setHovered(null);
+      },
+
       grab: (c) => {
         if (hovered && overBadge(c)) {
           gadgets.remove(hovered, world.grid);
@@ -269,9 +313,7 @@ export function boot(opts: BootOptions): SandApp {
         held = gadgets.hit(c.x, c.y);
         if (held) {
           held.held = true;
-          // Con la fija en la mano el dock no se convierte en papelera: ofrecer
-          // tirar algo que no se puede tirar es prometer lo que no hay.
-          if (!held.permanent) dock?.onGrab();
+          dock?.onGrab();
         }
       },
 
@@ -289,6 +331,13 @@ export function boot(opts: BootOptions): SandApp {
         const g = held;
         held = null;
         if (g) g.held = false;
+        // La pieza ya no esta donde estaba, asi que su × tampoco. El sitio del
+        // boton se fija al senalar la pieza y `setHovered` no lo recalcula
+        // mientras siga siendo la misma: sin soltar aqui la marca, el boton se
+        // quedaba en el punto donde la pieza estaba antes del arrastre — y
+        // pulsar donde ahora se ve la × dibujaba una pared. Era el motivo real
+        // de que "no se pueda quitar la fuente": basta con haberla movido.
+        setHovered(null);
         // Se pregunta por la papelera ANTES de soltarla. `isTrash` exige que el
         // dock este en modo papelera, y `onRelease` es justo lo que le quita ese
         // modo: llamandolo primero, la pregunta salia siempre que no, y tirar
@@ -405,7 +454,23 @@ export function boot(opts: BootOptions): SandApp {
       ctx.restore();
     }
 
-    if (input?.present && !held && !ghost) {
+    // Pieza a medio colocar: se le tira una goma desde el centro hasta el
+    // puntero. La pieza ya crece siguiendolo, pero la goma es lo unico que dice
+    // que el gesto sigue abierto y que falta un clic para cerrarlo.
+    if (sizing && input?.present) {
+      const { ctx, s } = d;
+      ctx.save();
+      ctx.strokeStyle = THEME.inkBright;
+      ctx.lineWidth = 1;
+      ctx.setLineDash([2, 4]);
+      ctx.beginPath();
+      ctx.moveTo((sizing.cx + 0.5) * s, (sizing.cy + 0.5) * s);
+      ctx.lineTo(input.x, input.y);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    if (input?.present && !held && !ghost && !sizing) {
       const cell = { x: Math.floor(input.x / renderer.s), y: Math.floor(input.y / renderer.s) };
       // La pieza senalada se mantiene mientras el puntero siga sobre ella o
       // sobre su boton de quitar; si no, el boton desapareceria justo al ir a
@@ -573,9 +638,15 @@ export function boot(opts: BootOptions): SandApp {
     },
     clear(): void {
       gadgets.clearAll(world.grid);
+      // La fuente de serie vuelve, en el sitio donde estuviera: se puede volar
+      // y se puede tirar, pero vaciar el lienzo es dejarlo como estaba, y como
+      // estaba habia una fuente. Si no, se puede acabar con un lienzo en blanco
+      // del que no cae nada y sin nada que explique por que.
+      gadgets.setPermanent(Emitter.main(world.source));
       ejecta.clear();
       held = null;
       ghost = null;
+      sizing = null;
       clearWorld(world.grid, world.drain);
       announce();
     },
@@ -586,11 +657,16 @@ export function boot(opts: BootOptions): SandApp {
     },
 
     beginPlacement(kind: GadgetKind): void {
+      // Coger otra ficha cierra el gesto a medias de la anterior: la pieza se
+      // queda con el tamano que tuviera. Cancelarla en su lugar la haria
+      // desaparecer al ir a por la siguiente, que es la clase de cosa que
+      // parece un fallo del programa.
+      sizing = null;
       if (!gadgets.roomFor(kind)) return;
       // Nace fuera de la pantalla: hasta el primer movimiento no hay sitio al
       // que apuntar, y aparecer en la esquina superior izquierda seria un
       // parpadeo en un sitio que no significa nada.
-      ghost = createGadget(kind, -1000, -1000);
+      ghost = createGadget(kind, -1000, -1000, world.grid.w);
       ghostOk = false;
       ghostFrom = null;
       ghostMoved = false;
@@ -629,6 +705,10 @@ export function boot(opts: BootOptions): SandApp {
 
       g.onMoved?.();
       if (!gadgets.add(g)) return false;
+      // Las que tienen una medida que signifique algo se quedan esperando el
+      // segundo punto del gesto. Ya estan puestas y funcionando: lo que falta
+      // es decirles de que tamano son.
+      if (isSizable(g.kind)) sizing = g;
       announce();
       return true;
     },

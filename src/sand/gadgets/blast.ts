@@ -210,6 +210,20 @@ export class Wick {
     if (this.flash <= 0) this.fuse = FUSE;
   }
 
+  /**
+   * Apaga mecha y anillo: la pieza vuelve a estar entera.
+   *
+   * Lo usa solo la fuente fija de la escena, que es la unica que no se puede
+   * perder — vuela como cualquier otra, pero en vez de quedarse muerta se
+   * reconstruye. Sin esto tendria que seguir siendo inmune a las explosiones,
+   * que era justo lo que se veia raro: la onda le pasa por encima, se lleva la
+   * arena que tiene debajo y la boquilla sigue manando tan tranquila.
+   */
+  revive(): void {
+    this.fuse = 0;
+    this.flash = 0;
+  }
+
   /** Acorta lo que quede de mecha. Nunca la alarga. */
   hurry(s: number): void {
     if (this.fuse > 0) this.fuse = Math.min(this.fuse, s);
