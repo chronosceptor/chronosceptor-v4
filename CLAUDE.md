@@ -49,6 +49,16 @@ La justificación de fondo de cada decisión de física está en el README, secc
   en el aire y aparecen huecos negros de la nada.
 - **Instantáneas no miden caudal.** Contar granos por zona en un sistema en flujo da
   deltas negativos sin sentido; hay que hacer series temporales.
+- **Para medir el chorro hay que hacer `clear()` primero y medir en el primer segundo.**
+  Con la escena llena, el cono llega hasta la boquilla y las filas de abajo miden el
+  montón, no el chorro: salieron anchos de 12 y 18 celdas que eran del cono y me hicieron
+  creer que un cambio funcionaba mucho mejor de lo que funcionaba. Y el ancho **mín-máx de
+  una fila no sirve** — lo fijan dos granos sueltos y sale plano pase lo que pase. Lo que
+  se ve es la desviación típica de la x de los granos de esa fila.
+- **Una medida con la bola dentro es ruidosa: su trayectoria es aleatoria.** El mismo
+  cuenco, la misma bola y los mismos 12 s dieron 46, 61 y 42 celdas de pared destruidas.
+  Hacen falta tres pasadas para que la media signifique algo, y aun así no da para afinar
+  un porcentaje.
 - **La física de cintas no mueve una carga compacta.** `slideLateral` exige la celda de destino
   vacía, así que en una bandeja llena solo puede moverse el grano de delante de cada capa, y ése
   está contra el costado. La plataforma parecía transportar y no transportaba: salía con 124 granos
@@ -94,6 +104,12 @@ Si algo va lento, el sospechoso no es el número de granos.
 Las piezas tampoco lo son: cuatro a la vez suben la simulación a 2,4 ms, y una explosión
 con 1.300 granos en vuelo la deja en 1,4. Los sospechosos serían el número de partículas de
 ejecta o el borrado de cuerpos, nunca la cantidad de arena.
+
+La caída libre lleva desde el commit `8cf5cdc` una deriva lateral (`DRIFT_P` en
+`physics.ts`) — la única rama que se le ha añadido al bucle caliente. Cuesta un `rand()`
+por grano **en vuelo** y por frame, no por grano: 1,07 → 1,13 ms con la escena cargada. Es
+una perilla de gusto con un margen útil estrecho; los números de la calibración están en el
+README.
 
 `inspect().despiertas` sale disparado después de un `clear()` y no significa nada:
 `clearWorld` marca todas las celdas como despiertas y las vacías nunca se vuelven a dormir,
