@@ -11,7 +11,8 @@ versionado según [SemVer](https://semver.org/lang/es/).
   Participan de la física de verdad: su cuerpo se estampa en el grid como material sólido y
   la arena choca con él, no son adornos pintados encima.
   - **Cruz giratoria** — cuatro aspas que giran y avientan la arena hacia el lado del giro.
-  - **Plataforma** — patrulla de izquierda a derecha llevándose encima lo que le caiga.
+  - **Plataforma** — bandeja con costados que patrulla de izquierda a derecha llevándose la
+    carga entera.
   - **Bomba** — mecha de 2 s con un anillo que se vacía, o se detona tocándola; revienta un
     radio de 42 celdas y se consume. Se lleva por delante tanto la arena como las paredes
     dibujadas: abre un boquete en el trazo y lo que aguantaba encima se desploma por él. El
@@ -36,10 +37,32 @@ versionado según [SemVer](https://semver.org/lang/es/).
   autómata celular y vuelven a ser granos normales al chocar. Es lo que hace posible la
   explosión sin engordar el bucle caliente de `physics.ts`.
 - `fabrica.inspect()` añade `piezas`, `ejecta` y `perdidos`. `perdidos` es el contador que
-  importa al tocar una pieza: son granos que salieron del grid y no encontraron dónde volver,
-  y debe quedarse en cero.
+  importa al tocar una pieza: son granos que salieron del grid y no encontraron dónde volver.
+  Es acumulado de toda la sesión y `clear()` no lo reinicia, así que lo que dice si algo
+  sangra arena es su delta en una ventana, no su valor absoluto.
 - `fabrica.beginPlacement()` / `movePlacement()` / `endPlacement()` para colocar piezas sin
   gestos, imprescindible para automatizar pruebas con Playwright.
+- **La bola desportilla la pared en la que rebota.** Cada golpe arranca un mordisco alrededor
+  del punto de contacto, con la probabilidad cayendo hacia el borde para que la mella salga
+  deshilachada y no recortada a compás. La fuerza es la componente normal de la velocidad, no
+  la rapidez: un golpe de refilón apenas raya y uno de frente saca un bocado, así que el
+  desgaste se dirige con el trazo. Una bola sepultada —le has dibujado encima— muerde a plena
+  fuerza y se abre paso. Medido: un cuenco pasa de 1.203 a 1.164 celdas de pared en 12 s, y
+  la bola acaba agujereando el suelo y escapándose.
+- **Cadena de explosiones.** Cualquier pieza que pille dentro una explosión se enciende, arde
+  dos segundos con el aro del alcance y el arco de cuenta atrás, y revienta a su vez
+  prendiendo a las que le pillen dentro a ella. Una bola encendida sigue rebotando mientras
+  arde, así que la explosión no se propaga en el sitio: se va corriendo. A lo que ya ardía la
+  onda lo precipita en vez de reiniciarlo, de modo que una fila de bombas cae en cascada
+  rápida y dos piezas encendidas a la vez no se reencienden en bucle. Probado: una bomba se
+  lleva por delante diez cruces a 60 fps.
+- **Hueco de bomba siempre disponible**, por encima del tope de diez y sin quitarle sitio a
+  las demás piezas. Con el lienzo lleno, el dock apaga todas las fichas menos la de la bomba.
+  El hueco se devuelve solo, porque la bomba se consume al estallar. Volar una pieza pasa a
+  ser la forma rápida de hacer sitio, en vez de arrastrarlas a la papelera de una en una.
+- **La fuente principal se arrastra**, homologada a pieza: es el mismo `Emitter` que las
+  colocables, adoptando la `Source` que ya vivía en el mundo. No ocupa hueco del tope, no se
+  tira a la papelera y no se la lleva una bomba.
 
 ### Changed
 
@@ -49,11 +72,29 @@ versionado según [SemVer](https://semver.org/lang/es/).
 - `Source` acepta la fila donde siembra, para que pueda colocarse en cualquier punto del
   lienzo y no sólo en el borde superior. La fuente fija de la escena no cambia de
   comportamiento.
-- La plataforma reutiliza la física de cintas de `physics.ts`, que estaba escrita desde la
-  fábrica original y no la usaba nadie. `physics.ts` no se ha modificado.
+- `physics.ts` no se ha modificado: ninguna pieza le añade una rama al bucle caliente.
+
+- **La plataforma pasa a ser una bandeja que traslada su carga en bloque.** Llegó a estar
+  hecha de material de cinta, aprovechando el arrastre por rozamiento que `physics.ts`
+  llevaba escrito y sin usar desde la fábrica original. Parecía la respuesta y no lo era: la
+  cinta no puede mover una carga compacta, porque el arrastre es un paso lateral y
+  `slideLateral` exige la celda de destino vacía, así que en una bandeja llena el único grano
+  que puede moverse es el de delante de cada capa — y ése está contra el costado. Medido:
+  salía de debajo del chorro con 124 granos y llegaba al otro extremo con 22, y los 102 que
+  faltaban no se caían por ningún sitio, nunca se movieron. Ahora tiene costados —sin ellos
+  el montón derrama por los dos extremos en cuanto es más alto que media barra— y traslada su
+  contenido una celda cada vez que avanza una celda: llega entera, 200 de 200. Para
+  descargarla se arrastra, y la carga se queda donde estaba.
+- La explosión y la mecha salen de `bomb.ts` a `src/sand/gadgets/blast.ts`. La mecha es una
+  clase `Wick` por composición que cualquier pieza puede llevar; la bomba no tiene una
+  propia, lleva la misma sólo que nace encendida.
 
 ### Fixed
 
+- **Al reescalar tras un redimensionado no se avisaba a las piezas.** `GadgetLayer.rescale()`
+  movía `cx`/`cy` sin llamar a `onMoved()`, así que una pieza con estado atado a su sitio
+  acababa pintándose donde toca y actuando donde estaba: un emisor colocado se dibujaba en la
+  posición nueva y sembraba en la vieja. Llevaba ahí desde que hay emisores colocables.
 - **Una pieza en movimiento se comía la arena.** `Grid.displaceSand()` destruía el grano que
   no encontraba hueco donde apartarse; medido, una sola cruz bajo el chorro se llevaba 337
   granos en 5 s —un 15% del caudal— y el lienzo dejaba de llenarse sin que nada lo explicara.

@@ -118,10 +118,6 @@ export class Renderer {
   }
 
   /** La fuente, en el centro superior. */
-  drawSource(d: DrawCtx, x: number): void {
-    drawNozzle(d, x, 0);
-  }
-
   /**
    * Circulo de la brocha bajo el puntero.
    *

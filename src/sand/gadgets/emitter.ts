@@ -2,7 +2,8 @@ import type { Grid } from '../grid';
 import { drawNozzle, type DrawCtx } from '../render';
 import { mulberry32 } from '../rng';
 import { Source } from '../world';
-import type { Gadget, TickCtx } from './index';
+import { Wick } from './blast';
+import type { Blast, Gadget, TickCtx } from './index';
 
 /** Radio de agarre, en celdas. */
 const GRAB_R = 8;
@@ -34,26 +35,51 @@ const COLOR_PERIOD = 26;
  *
  * No tiene cuerpo solido: una boquilla que ademas fuese pared se taponaria con
  * su propia arena.
+ *
+ * La fuente fija de la escena es esta misma pieza, adoptando la `Source` que ya
+ * vivia en el mundo (`Emitter.main`). Homologarla salio practicamente gratis y
+ * a cambio se arrastra, estorba a las demas y se pinta por el mismo camino que
+ * las otras cuatro; antes era un caso aparte que solo sabia estar arriba en el
+ * centro. Lo unico que conserva de excepcion es que no ocupa hueco del tope, no
+ * se tira a la papelera y no se la lleva una bomba: sin ella no hay arena.
  */
 export class Emitter implements Gadget {
   readonly kind = 'emitter';
   readonly radius = GRAB_R;
   dead = false;
 
-  private readonly source: Source;
+  readonly permanent: boolean;
 
+  private readonly source: Source;
+  /** Apagada mientras nada le estalle al lado. Una bomba se la lleva. */
+  private readonly wick = new Wick();
+
+  /**
+   * `adoptada` es la `Source` que ya existia; solo la pasa la fuente fija de la
+   * escena, que no puede fabricarse una nueva porque el drenaje y los cambios
+   * de cancion hablan con la del mundo.
+   */
   constructor(
     public cx: number,
     public cy: number,
+    adoptada?: Source,
   ) {
-    this.source = new Source(
-      cx,
-      NOZZLE,
-      RATE,
-      COLOR_PERIOD,
-      mulberry32((Date.now() ^ (cx * 2654435761)) >>> 0),
-      cy,
-    );
+    this.permanent = adoptada !== undefined;
+    this.source =
+      adoptada ??
+      new Source(
+        cx,
+        NOZZLE,
+        RATE,
+        COLOR_PERIOD,
+        mulberry32((Date.now() ^ (cx * 2654435761)) >>> 0),
+        cy,
+      );
+  }
+
+  /** La fuente fija de la escena, envuelta como pieza. */
+  static main(source: Source): Emitter {
+    return new Emitter(source.x, source.y, source);
   }
 
   onMoved(): void {
@@ -65,11 +91,37 @@ export class Emitter implements Gadget {
     // Sin cuerpo que borrar.
   }
 
+  /** Toque: si esta encendida, revienta ya. Apagada no hace nada. */
+  tap(): void {
+    this.wick.tap();
+  }
+
+  ignite(b: Blast): void {
+    // A la fija no la enciende nada. Volarla dejaria el lienzo sin arena y sin
+    // forma de recuperarla: no es una pieza que se pueda perder.
+    if (this.permanent) return;
+    this.wick.ignite(b, this.cx, this.cy, GRAB_R);
+  }
+
   tick(c: TickCtx, dt: number): void {
+    const paso = this.wick.step(c, dt, this.cx, this.cy);
+    if (paso === 'fin') {
+      this.dead = true;
+      return;
+    }
+    // Reventada, deja de manar. Una boquilla que sigue soltando arena desde
+    // dentro de su propia explosion no se lee como una boquilla destruida.
+    if (paso === 'humo') return;
+
     this.source.tick(c.grid, dt, c.palette, c.rand, c.budget);
   }
 
   draw(d: DrawCtx): void {
+    if (this.wick.blown) {
+      this.wick.drawRing(d, this.cx, this.cy);
+      return;
+    }
     drawNozzle(d, this.cx, this.cy);
+    this.wick.drawFuse(d, this.cx, this.cy, GRAB_R);
   }
 }

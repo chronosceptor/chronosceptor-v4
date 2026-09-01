@@ -33,10 +33,11 @@ const PIEZAS = [
             )}
             {kind === 'platform' && (
               <>
-                <path d="M3 14h18" />
+                {/* Con costados: es una bandeja, y lo que lleva se va con ella. */}
+                <path d="M3 14h18M3 14V9M21 14V9" />
                 <circle cx="5.5" cy="16.5" r="2.2" />
                 <circle cx="18.5" cy="16.5" r="2.2" />
-                <path d="M8 8h8M8 8l2.2-2.2M8 8l2.2 2.2M16 8l-2.2-2.2M16 8l-2.2 2.2" />
+                <path d="M9 5h6M9 5l1.8-1.8M9 5l1.8 1.8M15 5l-1.8-1.8M15 5l-1.8 1.8" />
               </>
             )}
             {kind === 'bomb' && (
@@ -142,7 +143,8 @@ const PIEZAS = [
   }
 
   /* Tope de piezas alcanzado: las fichas dejan de ofrecerse. */
-  #dock.lleno .ficha {
+  #dock.lleno .ficha,
+  #dock.solo-bomba .ficha:not([data-kind='bomb']) {
     opacity: 0.3;
     cursor: not-allowed;
   }

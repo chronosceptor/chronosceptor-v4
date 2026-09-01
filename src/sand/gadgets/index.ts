@@ -33,6 +33,14 @@ export function createGadget(kind: GadgetKind, cx: number, cy: number): Gadget {
   }
 }
 
+/** Donde ha estallado algo, para las piezas a las que eso les importe. */
+export interface Blast {
+  x: number;
+  y: number;
+  /** Radio de la explosion, en celdas. */
+  r: number;
+}
+
 /** Lo que una pieza recibe en cada paso de simulacion. */
 export interface TickCtx {
   grid: Grid;
@@ -42,7 +50,21 @@ export interface TickCtx {
   rand: () => number;
   /** Granos que aun caben antes del tope de arena viva. Lo reparte el emisor. */
   budget: number;
+  /**
+   * Explosiones de este paso. Quien estalla las apunta aqui y la capa las
+   * reparte al terminar la ronda.
+   */
+  blasts: Blast[];
 }
+
+/**
+ * Lo que la capa recibe de fuera.
+ *
+ * `blasts` no viene del mundo: lo pone la capa en cada paso porque es su
+ * cuaderno para pasarse avisos entre piezas, y nadie de fuera tiene nada que
+ * apuntar en el.
+ */
+export type WorldCtx = Omit<TickCtx, 'blasts'>;
 
 /**
  * Una pieza colocada en el lienzo.
@@ -70,6 +92,15 @@ export interface Gadget {
   /** La bomba se marca al explotar; la capa la retira al final del paso. */
   dead: boolean;
   /**
+   * Pieza fija de la escena: la fuente principal.
+   *
+   * Se arrastra, se pinta y estorba a las demas igual que cualquier otra —de
+   * eso se trataba, de homologarla—, pero no ocupa hueco del tope, no se puede
+   * tirar a la papelera y no se la lleva una bomba. Un lienzo sin ella no
+   * tendria de donde salir la arena, y entonces ya no es la pieza.
+   */
+  readonly permanent?: boolean;
+  /**
    * La esta arrastrando el usuario ahora mismo.
    *
    * Solo le importa a las piezas que se mueven solas: la bola tiene que
@@ -83,8 +114,17 @@ export interface Gadget {
   tick(c: TickCtx, dt: number): void;
   /** Trazo vectorial, encima del bitmap de arena. */
   draw(d: DrawCtx): void;
-  /** Toque sin arrastre. Solo la bomba lo usa (detona). */
+  /** Toque sin arrastre. La bomba detona; la bola, solo si esta encendida. */
   tap?(): void;
+  /**
+   * Ha estallado algo cerca.
+   *
+   * Cada pieza decide si le afecta y en que radio: la bola se enciende y se
+   * vuelve una bomba, y a las demas les da igual. La comprobacion de distancia
+   * es suya y no de la capa porque el alcance se mide contra su cuerpo, que
+   * cada una sabe como de grande es.
+   */
+  ignite?(b: Blast): void;
   /**
    * El arrastre acaba de recolocar la pieza.
    *
@@ -97,16 +137,44 @@ export interface Gadget {
 
 /** Cuantas piezas caben en el lienzo a la vez. */
 export const MAX_GADGETS = 10;
+/**
+ * Y una bomba mas, por encima del tope, siempre.
+ *
+ * Con el lienzo lleno, la unica forma de quitar algo era arrastrarlo hasta la
+ * papelera de una en una. Guardando este hueco siempre hay sitio para una
+ * bomba, y una bomba se lleva por delante todo lo que le pille dentro: es la
+ * forma rapida de despejar, y la divertida. Va por encima del tope y no
+ * quitandole un sitio a las demas — reservar uno de los diez saldria igual de
+ * caro que no poder poner la bomba.
+ *
+ * Se devuelve solo: la bomba se consume al estallar, asi que el hueco vuelve a
+ * estar libre a los dos segundos sin que nadie tenga que acordarse de nada.
+ */
+const BOMB_SLOT = 1;
 
 export class GadgetLayer {
   private items: Gadget[] = [];
 
+  /** Piezas que ha puesto el usuario. La fija de la escena no cuenta. */
   get count(): number {
-    return this.items.length;
+    let n = 0;
+    for (const g of this.items) if (!g.permanent) n++;
+    return n;
   }
 
+  /** No cabe absolutamente nada, ni una bomba. */
   get full(): boolean {
-    return this.items.length >= MAX_GADGETS;
+    return !this.roomFor('bomb');
+  }
+
+  /** Solo cabe ya una bomba: el resto de fichas del dock se apagan. */
+  get onlyBomb(): boolean {
+    return !this.full && !this.roomFor('spinner');
+  }
+
+  /** ¿Cabe una pieza de este tipo? La bomba tiene su propio hueco. */
+  roomFor(kind: GadgetKind): boolean {
+    return this.count < MAX_GADGETS + (kind === 'bomb' ? BOMB_SLOT : 0);
   }
 
   /**
@@ -121,12 +189,13 @@ export class GadgetLayer {
   }
 
   add(g: Gadget): boolean {
-    if (this.full) return false;
+    if (!this.roomFor(g.kind)) return false;
     this.items.push(g);
     return true;
   }
 
   remove(g: Gadget, grid: Grid): void {
+    if (g.permanent) return;
     const i = this.items.indexOf(g);
     if (i < 0) return;
     g.clear(grid);
@@ -141,9 +210,18 @@ export class GadgetLayer {
    * escrito de la que va detras en la lista, y dos piezas que se tocan
    * parpadearian y dejarian pasar la arena por la junta.
    */
-  tick(c: TickCtx, dt: number): void {
+  tick(w: WorldCtx, dt: number): void {
+    const c: TickCtx = { ...w, blasts: [] };
+
     for (const g of this.items) g.clear(c.grid);
     for (const g of this.items) g.tick(c, dt);
+
+    // Contagio: lo que ha estallado prende a quien le haya pillado dentro. Va
+    // aqui y no dentro de la bomba por lo mismo que el choque entre bolas: no
+    // es comportamiento de la que estalla, es de la pareja. Y al repartirlo
+    // despues de la ronda, una cadena tarda un paso por eslabon en vez de
+    // resolverse entera en un solo fotograma, que es lo que la hace verse.
+    for (const b of c.blasts) for (const g of this.items) g.ignite?.(b);
 
     // Los choques entre bolas se resuelven despues de que todas se hayan
     // movido, y aqui y no dentro de la bola: un choque es de la pareja, no de
@@ -184,7 +262,21 @@ export class GadgetLayer {
 
   clearAll(grid: Grid): void {
     for (const g of this.items) g.clear(grid);
-    this.items = [];
+    // La fija se queda: vaciar el lienzo es quitar lo que has puesto tu, no
+    // dejarlo sin fuente y por tanto sin nada que mirar.
+    this.items = this.items.filter((g) => g.permanent);
+  }
+
+  /**
+   * Instala la pieza fija de la escena, en lugar de la que hubiera.
+   *
+   * Va la primera de la lista y no la ultima porque `hit()` recorre del final
+   * al principio: asi cualquier pieza que el usuario deje encima le gana el
+   * gesto, que es lo que se espera de la que acabas de soltar.
+   */
+  setPermanent(g: Gadget): void {
+    this.items = this.items.filter((it) => !it.permanent);
+    this.items.unshift(g);
   }
 
   /**
@@ -197,6 +289,10 @@ export class GadgetLayer {
     for (const g of this.items) {
       g.cx = Math.max(0, Math.min(grid.w - 1, Math.round(g.cx * fx)));
       g.cy = Math.max(0, Math.min(grid.h - 1, Math.round(g.cy * fy)));
+      // Como en un arrastre: hay piezas que atan estado a su sitio —la fuente
+      // guarda su boquilla aparte— y sin avisarlas se quedarian pintandose
+      // donde toca y actuando donde estaban.
+      g.onMoved?.();
     }
   }
 }

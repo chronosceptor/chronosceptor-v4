@@ -7,6 +7,7 @@ import { DEFAULT_PALETTE, THEME, type Palette } from './palette';
 import { mulberry32 } from './rng';
 import { Ejecta } from './ejecta';
 import { createGadget, GadgetLayer, type Gadget, type GadgetKind } from './gadgets';
+import { Emitter } from './gadgets/emitter';
 
 export interface BootOptions {
   sandCanvas: HTMLCanvasElement;
@@ -32,8 +33,15 @@ export interface DockHooks {
   onGrab(): void;
   /** Se solto. */
   onRelease(): void;
-  /** Cambio el numero de piezas colocadas. */
-  onCount(count: number, full: boolean): void;
+  /**
+   * Cambio el numero de piezas colocadas.
+   *
+   * `full` es que no cabe nada; `onlyBomb`, que solo cabe ya una bomba. Son dos
+   * estados distintos porque el dock los pinta distinto: con el lienzo lleno se
+   * apagan todas las fichas menos la de la bomba, que es la que sigue sirviendo
+   * para hacer sitio.
+   */
+  onCount(count: number, full: boolean, onlyBomb: boolean): void;
 }
 
 export interface SandApp {
@@ -126,7 +134,7 @@ export function boot(opts: BootOptions): SandApp {
   let announced = -1;
   const announce = (): void => {
     announced = gadgets.count;
-    dock?.onCount(gadgets.count, gadgets.full);
+    dock?.onCount(gadgets.count, gadgets.full, gadgets.onlyBomb);
   };
 
   /**
@@ -209,7 +217,18 @@ export function boot(opts: BootOptions): SandApp {
 
     input?.destroy();
     world = createWorld(cssW, cssH, opts.fillFrac);
-    if (previous) transferDrawing(previous.grid, world.grid);
+    if (previous) {
+      transferDrawing(previous.grid, world.grid);
+      // La boquilla fija se arrastra, asi que donde este es cosa del usuario y
+      // no del tamano de la ventana. Se copia en celdas del grid viejo porque
+      // el reescalado de las piezas corre justo despues y la va a convertir.
+      world.source.x = previous.source.x;
+      world.source.y = previous.source.y;
+    }
+    // La fuente de la escena es una pieza mas, solo que fija: se arrastra y
+    // estorba a las demas como cualquiera, pero no ocupa hueco ni se puede
+    // quitar. Se reinstala en cada build porque el mundo nuevo trae su `Source`.
+    gadgets.setPermanent(Emitter.main(world.source));
 
     // El grano que una pieza en movimiento no logra apartar sale volando en vez
     // de evaporarse. Es lo que convierte a la cruz en algo que avienta y no en
@@ -250,7 +269,9 @@ export function boot(opts: BootOptions): SandApp {
         held = gadgets.hit(c.x, c.y);
         if (held) {
           held.held = true;
-          dock?.onGrab();
+          // Con la fija en la mano el dock no se convierte en papelera: ofrecer
+          // tirar algo que no se puede tirar es prometer lo que no hay.
+          if (!held.permanent) dock?.onGrab();
         }
       },
 
@@ -351,6 +372,9 @@ export function boot(opts: BootOptions): SandApp {
     // Una pieza puede haberse consumido sola (la bomba al estallar).
     if (gadgets.count !== announced) announce();
 
+    // La fuente principal no tiene camino propio: siembra dentro del paso de
+    // las piezas, como los emisores que se colocan. Aqui solo queda lo que sigue
+    // siendo del mundo y no de la pieza — el lote de color de cada cancion.
     if (paused) {
       shift -= dt;
       if (shift <= 0 && pending) {
@@ -359,8 +383,6 @@ export function boot(opts: BootOptions): SandApp {
         // Cancion nueva, lote nuevo: el color arranca de inmediato.
         source.newBatch();
       }
-    } else {
-      source.tick(grid, dt, palette, rand, headroom());
     }
 
     ejecta.step(grid, dt);
@@ -370,7 +392,6 @@ export function boot(opts: BootOptions): SandApp {
   function render(): void {
     renderer.paintSand(ejecta);
     const d = renderer.beginFx();
-    renderer.drawSource(d, world.source.x);
     gadgets.draw(d);
 
     // El fantasma es una pieza de verdad sin colocar: se pinta con su propio
@@ -565,7 +586,7 @@ export function boot(opts: BootOptions): SandApp {
     },
 
     beginPlacement(kind: GadgetKind): void {
-      if (gadgets.full) return;
+      if (!gadgets.roomFor(kind)) return;
       // Nace fuera de la pantalla: hasta el primer movimiento no hay sitio al
       // que apuntar, y aparecer en la esquina superior izquierda seria un
       // parpadeo en un sitio que no significa nada.

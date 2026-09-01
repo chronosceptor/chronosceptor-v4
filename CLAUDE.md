@@ -29,6 +29,13 @@ La justificación de fondo de cada decisión de física está en el README, secc
   con no editar. Antes de medir nada, navegar de nuevo a la página (una URL con parámetro
   distinto obliga a la carga) y no tocar archivos hasta acabar. Confirmación rápida de que
   el entorno está limpio: un gesto debe dejar `inspect().piezas` en exactamente 1.
+- **El overlay de error de Vite se traga los eventos de puntero y no lo parece.** El servidor
+  de desarrollo lanza `UnhandledRejection: Could not establish a connection to the Netlify
+  Edge Functions local development server` y pinta un `<vite-error-overlay>` a pantalla
+  completa con `z-index: 99999`. La página sigue corriendo por debajo —`fabrica.inspect()`
+  responde con normalidad— pero ningún clic ni arrastre llega al canvas: un trazo de
+  Playwright dejó `paredes 0` sin ningún error. Cura antes de medir nada con el ratón:
+  `document.querySelectorAll('vite-error-overlay').forEach(o => o.remove())`.
 - **`astro preview` no funciona con el adaptador de Netlify** (el proceso muere antes de
   escuchar), así que no hay forma fácil de medir contra un build de producción.
 - **Verifica que una edición aterrizó antes de medir nada.** Dos reemplazos de texto con
@@ -42,11 +49,23 @@ La justificación de fondo de cada decisión de física está en el README, secc
   en el aire y aparecen huecos negros de la nada.
 - **Instantáneas no miden caudal.** Contar granos por zona en un sistema en flujo da
   deltas negativos sin sentido; hay que hacer series temporales.
+- **La física de cintas no mueve una carga compacta.** `slideLateral` exige la celda de destino
+  vacía, así que en una bandeja llena solo puede moverse el grano de delante de cada capa, y ése
+  está contra el costado. La plataforma parecía transportar y no transportaba: salía con 124 granos
+  y llegaba con 22, y los 102 que faltaban no se caían por ningún sitio — nunca se movieron. Si algo
+  tiene que viajar en bloque, hay que trasladarlo a mano; el arrastre por rozamiento solo sirve para
+  una capa suelta que fluye.
+- **`inspect().piezas` no cuenta la fuente principal, pero `donde` sí la lista.** Es una pieza fija
+  (`permanent`) que no ocupa hueco del tope: con el lienzo lleno, `piezas` dice 10 y `donde` trae 11.
+- **`inspect().perdidos` es acumulado de toda la sesión y `clear()` no lo reinicia.** Vale para ver
+  si algo sangra arena, pero solo mirando el delta en una ventana: leerlo en seco y ver 95 no acusa
+  a lo que acabas de tocar.
 - **Una pieza que se mueve dentro de un montón se come la arena si no se le da salida.**
   `displaceSand()` destruye el grano que no cabe en ningún hueco. Sin `Grid.overflow`, una
   sola cruz bajo el chorro se comía 337 granos en 5 s (15% del caudal). Para medirlo hay
   que comparar la ganancia con y sin la pieza en la misma ventana, nunca mirar `sand` a
-  secas: la fuente y el drenaje enmascaran la fuga. `inspect().perdidos` debe quedarse en 0.
+  secas: la fuente y el drenaje enmascaran la fuga. `inspect().perdidos` no debe subir mientras
+  la pieza está puesta.
 
 ## Depuración
 

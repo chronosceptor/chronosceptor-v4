@@ -3,7 +3,8 @@ import { SAND, WALL } from '../materials';
 import { THEME, rgbCss } from '../palette';
 import type { DrawCtx } from '../render';
 import { RESERVED_ROWS } from '../world';
-import type { Gadget, TickCtx } from './index';
+import { Wick } from './blast';
+import type { Blast, Gadget, TickCtx } from './index';
 
 const TAU = Math.PI * 2;
 /**
@@ -32,6 +33,21 @@ const SPEED = 145;
  * justo donde esta— y no basta con rebotar: hay que ir sacandola.
  */
 const PUSH_OUT = 1.5;
+/**
+ * Radio del mordisco que cada golpe arranca de la pared, en celdas.
+ *
+ * Muy por debajo del radio de la bola a proposito. Llevandose de un tajo todas
+ * las celdas que toca —que es lo que sale solo, porque ya estan contadas para
+ * calcular la normal— cualquier trazo fino se parte en el primer golpe, la bola
+ * lo atraviesa y se acaba el pinball: el dibujo dejaria de desviarla justo
+ * cuando empiezas a usarlo para dirigirla.
+ */
+const BITE_R = 5;
+/**
+ * Cuanto se lleva un golpe de frente a plena velocidad, como fraccion de las
+ * celdas del mordisco. El resto de golpes salen de ahi hacia abajo.
+ */
+const BITE_P = 0.8;
 
 /**
  * Bola que rebota y se come la arena que toca.
@@ -45,6 +61,18 @@ const PUSH_OUT = 1.5;
  * era tratarla solo como una escoba: pudiendo chocar, el dibujo se convierte en
  * la mesa de un pinball. Si se queda encerrada, se saca arrastrandola.
  *
+ * Y cada golpe deja mella: la pared se va desportillando por donde la bola la
+ * golpea. Un cuenco que la encierra no la encierra para siempre — lo va picando
+ * hasta abrirse — y una pared puesta a modo de raqueta se gasta con el uso. El
+ * dibujo deja de ser decorado permanente y pasa a ser algo que hay que
+ * mantener, que es lo que da tension a tenerlas sueltas por el lienzo.
+ *
+ * Y si le pilla dentro una explosion, se enciende: se vuelve ella misma una
+ * bomba y estalla al agotarse la mecha, prendiendo de paso a las que le pillen
+ * dentro a ella. Sigue rebotando mientras arde, que es lo que la separa de la
+ * bomba de mecha —esa se queda donde la dejas— y lo que hace que la cadena
+ * valga la pena: la explosion no se propaga en el sitio, se va corriendo.
+ *
  * No tiene cuerpo solido en el grid. Podria estamparse como DYN para que la
  * arena chocase con ella, pero seria trabajo tirado: lo que hay dentro de su
  * radio deja de existir en el mismo paso, asi que nunca habria nada contra lo
@@ -57,6 +85,9 @@ export class Ball implements Gadget {
   readonly footprint = BALL_R;
   dead = false;
   held = false;
+
+  /** Apagada mientras nada le estalle al lado, que es lo normal. */
+  private readonly wick = new Wick();
 
   /**
    * Posicion y velocidad en celdas y celdas/s, en coma flotante: a esta
@@ -109,8 +140,27 @@ export class Ball implements Gadget {
     // Sin cuerpo que borrar.
   }
 
+  ignite(b: Blast): void {
+    this.wick.ignite(b, this.px, this.py, BALL_R);
+  }
+
+  /** Toque: si esta encendida, revienta ya. Apagada no hace nada. */
+  tap(): void {
+    this.wick.tap();
+  }
+
   tick(c: TickCtx, dt: number): void {
     const g = c.grid;
+
+    const paso = this.wick.step(c, dt, this.cx, this.cy);
+    if (paso === 'fin') {
+      this.dead = true;
+      return;
+    }
+    // Ya reventada: ni se mueve ni se come nada mientras se apaga el anillo.
+    // Ha dejado de ser una bola.
+    if (paso === 'humo') return;
+
     // Mientras se arrastra se queda quieta, o se escaparia del dedo.
     if (!this.held) {
       const prevX = this.px;
@@ -119,7 +169,7 @@ export class Ball implements Gadget {
       this.py += this.vy * dt;
 
       this.bounceEdges(g);
-      this.bounceWalls(g, prevX, prevY);
+      this.bounceWalls(c, prevX, prevY);
       this.clampInside(g);
 
       this.cx = Math.round(this.px);
@@ -162,15 +212,22 @@ export class Ball implements Gadget {
   }
 
   /**
-   * Rebote contra el dibujo del usuario.
+   * Rebote contra el dibujo del usuario, y mordisco en el punto del golpe.
    *
    * La normal se calcula sumando hacia donde queda el centro de la bola desde
    * cada celda de pared que la toca. No basta con invertir el eje del
    * movimiento: casi nadie dibuja lineas rectas horizontales o verticales, y
    * contra un trazo inclinado esa simplificacion devuelve la bola por donde
    * vino en vez de desviarla, que es justo la gracia de poder dirigirla.
+   *
+   * De ese mismo recorrido sale ademas el centro de la zona de contacto, que es
+   * donde muerde. Se usa el centro de las celdas que la tocan y no el punto de
+   * su superficie en direccion de la normal porque contra una esquina o un
+   * trazo casi tangente los dos no coinciden, y la mella tiene que quedar donde
+   * se ha visto el impacto.
    */
-  private bounceWalls(g: Grid, prevX: number, prevY: number): void {
+  private bounceWalls(c: TickCtx, prevX: number, prevY: number): void {
+    const g = c.grid;
     const r2 = BALL_R * BALL_R;
     const cx = Math.round(this.px);
     const cy = Math.round(this.py);
@@ -181,6 +238,8 @@ export class Ball implements Gadget {
 
     let sx = 0;
     let sy = 0;
+    let mx = 0;
+    let my = 0;
     let n = 0;
     for (let y = y0; y <= y1; y++) {
       const dy = y - cy;
@@ -191,6 +250,8 @@ export class Ball implements Gadget {
         // Vector de la celda hacia el centro: sumados, apuntan hacia afuera.
         sx -= dx;
         sy -= dy;
+        mx += x;
+        my += y;
         n++;
       }
     }
@@ -198,10 +259,13 @@ export class Ball implements Gadget {
 
     const len = Math.hypot(sx, sy);
     if (len < 1e-6) {
-      // Sepultada en una masa simetrica de pared: no hay una direccion de
-      // salida mejor que otra, asi que se devuelve por donde vino.
+      // Sepultada en una masa simetrica de pared —le han dibujado encima— y no
+      // hay una direccion de salida mejor que otra, asi que se devuelve por
+      // donde vino. El mordisco va a plena fuerza: es lo que la deja abrirse
+      // una cavidad y salir, en vez de quedarse dentro rebotando para siempre.
       this.vx = -this.vx;
       this.vy = -this.vy;
+      this.chip(g, mx / n, my / n, 1, c.rand);
       return;
     }
 
@@ -209,15 +273,51 @@ export class Ball implements Gadget {
     const ny = sy / len;
     const vn = this.vx * nx + this.vy * ny;
     // Solo si va hacia dentro. Sin esta condicion, una bola que ya se esta
-    // separando se refleja otra vez y se queda pegada al muro temblando.
+    // separando se refleja otra vez y se queda pegada al muro temblando; y
+    // ademas seguiria comiendose la pared mientras se aleja de ella.
     if (vn < 0) {
       this.vx -= 2 * vn * nx;
       this.vy -= 2 * vn * ny;
+      // La fuerza del mordisco es la componente normal de la velocidad, no la
+      // rapidez: un golpe de refilon apenas raya la pared y uno de frente saca
+      // un bocado. Es lo que permite dirigir el desgaste con el trazo — una
+      // rampa tendida aguanta y un muro puesto de frente se gasta.
+      this.chip(g, mx / n, my / n, Math.min(1, -vn / SPEED), c.rand);
     }
     // Vuelve a donde no chocaba y se aparta un poco por la normal. Lo segundo
     // es lo que la saca cuando la pared ha aparecido encima de ella.
     this.px = prevX + nx * PUSH_OUT;
     this.py = prevY + ny * PUSH_OUT;
+  }
+
+  /**
+   * Arranca un mordisco de pared alrededor del punto de impacto.
+   *
+   * La probabilidad cae hacia el borde en vez de cortar a radio fijo, igual que
+   * en el boquete de la bomba: una mella de compas en mitad de un trazo hecho a
+   * mano se lee como un recorte, no como un golpe. Solo se lleva WALL, que es
+   * lo que dibuja el usuario; el suelo del mundo y los cuerpos de otras piezas
+   * no son suyos y ademas se reescriben solos cada paso.
+   */
+  private chip(g: Grid, atX: number, atY: number, force: number, rand: () => number): void {
+    const y0 = Math.max(0, Math.floor(atY - BITE_R));
+    const y1 = Math.min(g.h - 1, Math.ceil(atY + BITE_R));
+    const x0 = Math.max(0, Math.floor(atX - BITE_R));
+    const x1 = Math.min(g.w - 1, Math.ceil(atX + BITE_R));
+
+    for (let y = y0; y <= y1; y++) {
+      const dy = y - atY;
+      for (let x = x0; x <= x1; x++) {
+        const dx = x - atX;
+        const d = Math.hypot(dx, dy);
+        if (d > BITE_R) continue;
+        const i = g.idx(x, y);
+        if (g.mat[i] !== WALL) continue;
+        if (rand() < force * BITE_P * (1 - d / (BITE_R + 1))) g.removeAt(i);
+      }
+    }
+    // Lo que aguantaba encima de lo que se acaba de ir tiene que desplomarse.
+    g.wakeRect(x0 - 1, y0 - 1, x1 + 1, y1 + 1);
   }
 
   /** El empuje de salida puede haberla sacado del lienzo. */
@@ -250,9 +350,16 @@ export class Ball implements Gadget {
     g.wakeRect(x0 - 1, y0 - 1, x1 + 1, y1 + 1);
   }
 
-  draw({ ctx, s }: DrawCtx): void {
+  draw(d: DrawCtx): void {
+    const { ctx, s } = d;
     const cx = (this.cx + 0.5) * s;
     const cy = (this.cy + 0.5) * s;
+
+    if (this.wick.blown) {
+      this.wick.drawRing(d, this.cx, this.cy);
+      return;
+    }
+
     ctx.save();
     // Del mismo material que las paredes que dibuja el usuario: relleno con el
     // color de la masa y filete con el de la linea, que es exactamente como se
@@ -264,7 +371,14 @@ export class Ball implements Gadget {
     ctx.arc(cx, cy, BALL_R * s, 0, TAU);
     ctx.fill();
     ctx.stroke();
+
     ctx.restore();
+
+    // Lo mismo que lleva la bomba encendida, y a proposito: el aro tenue del
+    // alcance y el arco de mecha que se vacia. Una bola encendida es una bomba,
+    // y tiene que avisar de lo que se va a llevar con el mismo idioma — sobre
+    // todo esta, que ademas lo lleva paseando por el lienzo.
+    this.wick.drawFuse(d, this.cx, this.cy, BALL_R);
   }
 }
 

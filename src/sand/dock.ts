@@ -42,8 +42,9 @@ export function mountDock(app: SandApp, root: HTMLElement, onActivity: () => voi
     onRelease() {
       root.classList.remove('papelera');
     },
-    onCount(_count, full) {
+    onCount(_count, full, onlyBomb) {
       root.classList.toggle('lleno', full);
+      root.classList.toggle('solo-bomba', onlyBomb);
     },
   });
 
@@ -53,6 +54,8 @@ export function mountDock(app: SandApp, root: HTMLElement, onActivity: () => voi
 
     on(chip, 'pointerdown', (e) => {
       if (root.classList.contains('lleno')) return;
+      // Con el lienzo al tope, la bomba sigue disponible: es lo que hace sitio.
+      if (kind !== 'bomb' && root.classList.contains('solo-bomba')) return;
       e.preventDefault();
       try {
         chip.setPointerCapture(e.pointerId);

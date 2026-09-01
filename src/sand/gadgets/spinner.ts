@@ -2,7 +2,8 @@ import type { Grid } from '../grid';
 import { DYN } from '../materials';
 import { THEME } from '../palette';
 import type { DrawCtx } from '../render';
-import type { Gadget, TickCtx } from './index';
+import { Wick } from './blast';
+import type { Blast, Gadget, TickCtx } from './index';
 
 const TAU = Math.PI * 2;
 const BLADES = 4;
@@ -40,6 +41,8 @@ export class Spinner implements Gadget {
   readonly radius = SPINNER_R;
   dead = false;
   private angle = 0;
+  /** Apagada mientras nada le estalle al lado. Una bomba se la lleva. */
+  private readonly wick = new Wick();
   /** Caja del cuerpo escrito en el ultimo paso: es exactamente lo que hay que borrar. */
   private box: [number, number, number, number] | null = null;
 
@@ -57,7 +60,26 @@ export class Spinner implements Gadget {
     this.box = null;
   }
 
+  /** Toque: si esta encendida, revienta ya. Apagada no hace nada. */
+  tap(): void {
+    this.wick.tap();
+  }
+
+  ignite(b: Blast): void {
+    this.wick.ignite(b, this.cx, this.cy, SPINNER_R);
+  }
+
   tick(c: TickCtx, dt: number): void {
+    const paso = this.wick.step(c, dt, this.cx, this.cy);
+    if (paso === 'fin') {
+      this.dead = true;
+      return;
+    }
+    // Mientras se apaga el anillo no se estampa el cuerpo: el crater tiene que
+    // quedar abierto, y unas aspas intactas en medio de la explosion que se las
+    // acaba de llevar serian justo lo contrario de lo que ha pasado.
+    if (paso === 'humo') return;
+
     this.angle = (this.angle + this.dir * OMEGA * dt) % TAU;
     const g = c.grid;
     g.stampDisc(this.cx, this.cy, HUB_R, DYN);
@@ -101,7 +123,14 @@ export class Spinner implements Gadget {
     return this.dir * dy > 0 ? -1 : 1;
   }
 
-  draw({ ctx, s }: DrawCtx): void {
+  draw(d: DrawCtx): void {
+    const { ctx, s } = d;
+
+    if (this.wick.blown) {
+      this.wick.drawRing(d, this.cx, this.cy);
+      return;
+    }
+
     const cx = (this.cx + 0.5) * s;
     const cy = (this.cy + 0.5) * s;
     const r = (SPINNER_R + 0.5) * s;
@@ -125,5 +154,7 @@ export class Spinner implements Gadget {
     ctx.beginPath();
     ctx.arc(cx, cy, Math.max(1.5, HUB_R * s * 0.6), 0, TAU);
     ctx.stroke();
+
+    this.wick.drawFuse(d, this.cx, this.cy, SPINNER_R);
   }
 }
