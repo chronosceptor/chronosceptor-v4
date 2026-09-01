@@ -7,6 +7,18 @@ versionado según [SemVer](https://semver.org/lang/es/).
 
 ### Added
 
+### Changed
+
+### Fixed
+
+### Removed
+
+### Security
+
+## [0.2.0] - 2026-09-01
+
+### Added
+
 - **Piezas arrastrables.** Un dock en el borde inferior del que se arrastran piezas al lienzo.
   Participan de la física de verdad: su cuerpo se estampa en el grid como material sólido y
   la arena choca con él, no son adornos pintados encima.
@@ -110,8 +122,6 @@ versionado según [SemVer](https://semver.org/lang/es/).
   artista ya no se pintan: sólo entran en la clave de caché de la extracción de color.
   Con ella se van `src/components/NowPlaying.astro`, la etiqueta de antigüedad que se
   recalculaba cada medio minuto y las muestras de paleta.
-
-### Security
 
 ## [0.1.0] - 2026-08-31
 
