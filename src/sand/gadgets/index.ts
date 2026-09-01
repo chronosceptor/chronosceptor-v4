@@ -2,26 +2,22 @@ import type { Grid } from '../grid';
 import type { Palette } from '../palette';
 import type { DrawCtx } from '../render';
 import type { Ejecta } from '../ejecta';
-import type { Point } from '../draw';
-import { Spinner } from './spinner';
-import { Platform } from './platform';
 import { Bomb } from './bomb';
 import { Emitter } from './emitter';
 import { Ball, resolveBallCollisions } from './ball';
 
-export type GadgetKind = 'spinner' | 'platform' | 'bomb' | 'emitter' | 'ball';
-
 /**
- * Piezas que se colocan en dos tiempos: el primer punto las sitia y el segundo
- * les da el tamano.
+ * Las tres piezas del dock.
  *
- * Son las dos que tienen una medida que signifique algo — el radio de la cruz y
- * el largo de la bandeja. Una bomba o una bola no tienen ninguna: pedir un
- * segundo punto para nada seria un paso de mas en el gesto mas usado.
+ * Hubo dos mas —una cruz giratoria que aventaba la arena y una bandeja que la
+ * paseaba por un trayecto— y se quitaron enteras. No fallaban: hacian lo que
+ * prometian, y la bandeja llego a subir su carga por una rampa inclinada. Lo
+ * que pasa es que las tres que quedan se explican solas y se combinan entre
+ * ellas —la bola limpia, la bomba abre hueco, la fuente rellena—, y las otras
+ * dos pedian entenderlas antes de que hicieran gracia. Estan enteras en el
+ * commit b52c517 si alguna vez merece la pena recuperarlas.
  */
-export function isSizable(kind: GadgetKind): boolean {
-  return kind === 'spinner' || kind === 'platform';
-}
+export type GadgetKind = 'bomb' | 'emitter' | 'ball';
 
 /**
  * Crea una pieza suelta.
@@ -30,24 +26,20 @@ export function isSizable(kind: GadgetKind): boolean {
  * se pinta sin llegar a meterla en la capa, asi que la vista previa no puede
  * desviarse de lo que se va a colocar porque es literalmente lo mismo.
  *
- * `gridW` es el ancho del lienzo en celdas, y le importa a las dos piezas cuyo
- * tamano es una fraccion de la escena y no un numero de celdas: la bola y la
- * bandeja. En celdas fijas, las dos ocupaban en un movil cuatro veces la
- * porcion de pantalla que ocupan en un escritorio.
+ * `gridW` es el ancho del lienzo en celdas, y le importa a la bola, cuyo tamano
+ * es una fraccion de la escena y no un numero de celdas: en celdas fijas
+ * ocupaba en un movil cuatro veces la porcion de pantalla que ocupa en un
+ * escritorio.
  */
 export function createGadget(kind: GadgetKind, cx: number, cy: number, gridW?: number): Gadget {
   switch (kind) {
-    case 'platform':
-      return new Platform(cx, cy, gridW);
     case 'bomb':
       return new Bomb(cx, cy);
     case 'emitter':
       return new Emitter(cx, cy);
     case 'ball':
-      return new Ball(cx, cy, gridW);
-    case 'spinner':
     default:
-      return new Spinner(cx, cy, gridW);
+      return new Ball(cx, cy, gridW);
   }
 }
 
@@ -96,14 +88,8 @@ export interface Gadget {
   /** Centro, en celdas. */
   cx: number;
   cy: number;
-  /**
-   * Radio de agarre, en celdas. Manda en el hit-test y en el fantasma.
-   *
-   * No es `readonly`: las piezas que se dimensionan al colocarlas (ver
-   * `resize`) lo cambian, y todo lo que lo consulta —el aro, el hueco que
-   * reserva, el alcance de la mecha— tiene que ir detras.
-   */
-  radius: number;
+  /** Radio de agarre, en celdas. Manda en el hit-test y en el fantasma. */
+  readonly radius: number;
   /**
    * Sitio que ocupa de verdad, en celdas. Por defecto, el radio de agarre.
    *
@@ -162,33 +148,6 @@ export interface Gadget {
    * del punto donde se solto la primera vez.
    */
   onMoved?(): void;
-  /**
-   * Segundo punto del gesto de colocacion: le da el tamano a la pieza.
-   *
-   * `fits` es la regla de colocacion de la escena —cabe en el mundo y no pisa a
-   * nadie— y se pasa en vez de aplicarla fuera porque solo la pieza sabe que
-   * tamanos intermedios tiene y como se mueve su centro al cambiar de tamano:
-   * la cruz crece alrededor del suyo y la bandeja crece desde un extremo, asi
-   * que su centro se desplaza. Lo que hacen las dos si no cabe es lo mismo:
-   * quedarse en el mayor tamano que quepa, en vez de rechazar el gesto.
-   */
-  resize?(x: number, y: number, fits: (cx: number, cy: number, r: number) => boolean): void;
-  /**
-   * ¿Cae esta celda dentro del agarre? Por defecto, el disco de `radius`.
-   *
-   * Lo tiene la bandeja, que es larga y baja: con el disco, una bandeja de 64
-   * celdas abriria a su alrededor un socavon de 32 celdas de radio donde no se
-   * puede dibujar. Lo que hay que poder coger es la pieza, no el aire.
-   */
-  contains?(x: number, y: number): boolean;
-  /**
-   * Donde va la × de quitar. Por defecto, arriba a la derecha del radio.
-   *
-   * Tambien es de la bandeja: la diagonal del radio en una pieza larga y baja
-   * cae en mitad de la nada, muy por encima de ella, y un boton que no parece
-   * de nadie no se pulsa.
-   */
-  badgeAt?(): Point;
 }
 
 /** Cuantas piezas caben en el lienzo a la vez. */
@@ -225,7 +184,7 @@ export class GadgetLayer {
 
   /** Solo cabe ya una bomba: el resto de fichas del dock se apagan. */
   get onlyBomb(): boolean {
-    return !this.full && !this.roomFor('spinner');
+    return !this.full && !this.roomFor('ball');
   }
 
   /** ¿Cabe una pieza de este tipo? La bomba tiene su propio hueco. */
@@ -299,10 +258,6 @@ export class GadgetLayer {
   hit(x: number, y: number): Gadget | null {
     for (let i = this.items.length - 1; i >= 0; i--) {
       const g = this.items[i]!;
-      if (g.contains) {
-        if (g.contains(x, y)) return g;
-        continue;
-      }
       const dx = x - g.cx;
       const dy = y - g.cy;
       if (dx * dx + dy * dy <= g.radius * g.radius) return g;

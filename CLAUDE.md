@@ -61,12 +61,18 @@ La justificación de fondo de cada decisión de física está en el README, secc
   un porcentaje.
 - **La física de cintas no mueve una carga compacta.** `slideLateral` exige la celda de destino
   vacía, así que en una bandeja llena solo puede moverse el grano de delante de cada capa, y ése
-  está contra el costado. La plataforma parecía transportar y no transportaba: salía con 124 granos
-  y llegaba con 22, y los 102 que faltaban no se caían por ningún sitio — nunca se movieron. Si algo
-  tiene que viajar en bloque, hay que trasladarlo a mano; el arrastre por rozamiento solo sirve para
-  una capa suelta que fluye.
-- **`inspect().piezas` no cuenta la fuente principal, pero `donde` sí la lista.** Es una pieza fija
-  (`permanent`) que no ocupa hueco del tope: con el lienzo lleno, `piezas` dice 10 y `donde` trae 11.
+  está contra el costado. Lo descubrió la plataforma —que ya no existe—: salía con 124 granos y
+  llegaba con 22, y los 102 que faltaban no se caían por ningún sitio, nunca se movieron. El
+  `BELT_L`/`BELT_R` de `physics.ts` sigue ahí y volverá a tentar: si algo tiene que viajar en bloque,
+  hay que trasladarlo a mano.
+- **`inspect().piezas` no cuenta la fuente principal, pero `donde` sí la lista.** Es la pieza de
+  serie (`permanent`) y no ocupa hueco del tope: con el lienzo lleno, `piezas` dice 10 y `donde`
+  trae 11. `donde` da además el `r` de cada pieza.
+- **La fuente de serie ya no es indestructible: se vuela, se tira y `clear()` la repone.** Un lienzo
+  sin ninguna fuente es un estado válido y no cae arena; si al medir no crece `sand`, mira primero
+  si hay fuente antes de sospechar de la física.
+- **El tamaño de la bola sale del ancho del lienzo, no de un número de celdas** (10 celdas de radio
+  en escritorio, 5 en vertical). Un número absoluto medido en un perfil no vale en el otro.
 - **`inspect().perdidos` es acumulado de toda la sesión y `clear()` no lo reinicia.** Vale para ver
   si algo sangra arena, pero solo mirando el delta en una ventana: leerlo en seco y ver 95 no acusa
   a lo que acabas de tocar.
@@ -76,6 +82,9 @@ La justificación de fondo de cada decisión de física está en el README, secc
   que comparar la ganancia con y sin la pieza en la misma ventana, nunca mirar `sand` a
   secas: la fuente y el drenaje enmascaran la fuga. `inspect().perdidos` no debe subir mientras
   la pieza está puesta.
+- **El dock tiene tres piezas: fuente, bola y bomba.** Hubo una cruz giratoria y una plataforma, y
+  se quitaron enteras aunque funcionaban (commit `b52c517`, con lo último que llegaron a hacer:
+  colocación en dos tiempos y trayecto inclinado). No las reintroduzcas por tu cuenta.
 
 ## Depuración
 
@@ -101,7 +110,7 @@ El coste va con la arena **en movimiento**, no con la total: los granos asentado
 duermen. Medido: 90.000 granos → 1,4 ms de simulación por frame de un presupuesto de 16,7.
 Si algo va lento, el sospechoso no es el número de granos.
 
-Las piezas tampoco lo son: cuatro a la vez suben la simulación a 2,4 ms, y una explosión
+Las piezas tampoco lo son: cuatro a la vez subían la simulación a 2,4 ms, y una explosión
 con 1.300 granos en vuelo la deja en 1,4. Los sospechosos serían el número de partículas de
 ejecta o el borrado de cuerpos, nunca la cantidad de arena.
 

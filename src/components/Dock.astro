@@ -9,8 +9,6 @@
  */
 
 const PIEZAS = [
-  { kind: 'spinner', label: 'Cruz giratoria' },
-  { kind: 'platform', label: 'Plataforma' },
   { kind: 'bomb', label: 'Bomba' },
   { kind: 'emitter', label: 'Fuente' },
   { kind: 'ball', label: 'Bola: rebota y se come la arena' },
@@ -23,23 +21,6 @@ const PIEZAS = [
       PIEZAS.map(({ kind, label }) => (
         <button type="button" class="ficha" data-kind={kind} title={label} aria-label={label}>
           <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            {/* Sin aro: la ficha ensena lo que de verdad para la arena, que son
-                las aspas y el cubo. */}
-            {kind === 'spinner' && (
-              <>
-                <path d="M5.6 5.6l12.8 12.8M18.4 5.6L5.6 18.4" />
-                <circle cx="12" cy="12" r="1.6" />
-              </>
-            )}
-            {kind === 'platform' && (
-              <>
-                {/* Con costados: es una bandeja, y lo que lleva se va con ella. */}
-                <path d="M3 14h18M3 14V9M21 14V9" />
-                <circle cx="5.5" cy="16.5" r="2.2" />
-                <circle cx="18.5" cy="16.5" r="2.2" />
-                <path d="M9 5h6M9 5l1.8-1.8M9 5l1.8 1.8M15 5l-1.8-1.8M15 5l-1.8 1.8" />
-              </>
-            )}
             {kind === 'bomb' && (
               <>
                 <circle cx="11" cy="14.5" r="6.2" />

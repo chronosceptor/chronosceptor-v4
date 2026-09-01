@@ -7,11 +7,10 @@ física. Una rampa la hace bajar, una U la atrapa, un embudo la concentra.
 No hay herramientas que elegir: hay una sola materia sólida y todo el comportamiento sale de la
 forma que dibujes.
 
-Además, del dock de abajo se arrastran **piezas** que participan de la física de verdad — una cruz
-que gira y avienta, una plataforma que patrulla llevándose su carga entera, una bola que rebota y
-desportilla, una bomba y una fuente extra de arena. No son adornos pintados sobre el lienzo: su
-cuerpo se estampa en el grid como material sólido y la arena choca con él. La fuente principal es
-una más: se coge y se pone donde quieras.
+Además, del dock de abajo se arrastran **piezas** que participan de la física de verdad — una bola
+que rebota y desportilla, una bomba y una fuente extra de arena. No son adornos pintados sobre el
+lienzo: su cuerpo se estampa en el grid como material sólido y la arena choca con él. La fuente
+principal es una más: se coge, se pone donde quieras y se puede volar.
 
 El color de la arena sale de la portada del disco que estés escuchando, vía Last.fm. Como la fuente
 rota el color por lotes, los montones que atrapes quedan estratificados: al cambiar de canción, el
@@ -59,20 +58,27 @@ Y una excepción, solo para la bomba: **tocarla la detona** sin esperar a la mec
 
 | Pieza | Qué hace |
 |---|---|
-| **Cruz giratoria** | Cuatro aspas que giran y avientan la arena hacia el lado del giro |
-| **Plataforma** | Bandeja con costados: patrulla de izquierda a derecha **llevándose la carga entera** |
 | **Bomba** | Mecha de 2 s con un anillo que se vacía; revienta un radio de 42 celdas —arena, **paredes** y **cualquier pieza que pille dentro**— y se consume |
 | **Fuente** | Un segundo chorro, con su propio color dominante de la paleta |
 | **Bola** | Rebota en los bordes, en tus paredes y contra las otras bolas, y se come la arena que toca. Cada golpe **desportilla la pared** |
 
-Las piezas van con tamaño y velocidad fijos: no hay ajustes ni panel, igual que no hay selector de
-brocha. Caben diez a la vez; al llegar al tope las fichas del dock se atenúan **menos la de la
+Hubo dos piezas más: una **cruz giratoria** de cuatro aspas que aventaba la arena y una
+**plataforma** —bandeja con costados que paseaba su carga entera por un trayecto, y que llegó a
+poder subirla por una rampa inclinada—. Se quitaron enteras, y no por fallar: las tres que quedan se
+explican solas y se combinan entre ellas, y las otras dos pedían entenderlas antes de que hicieran
+gracia. Están completas en el commit `b52c517`.
+
+Las piezas van con velocidad fija y sin ajustes, igual que no hay selector de brocha; el tamaño de
+la bola sí sale del ancho del lienzo, ver abajo. Caben diez a la vez; al llegar al tope las fichas del dock se atenúan **menos la de la
 bomba**, que tiene su propio hueco reservado por encima del tope y está siempre disponible: es la
 que sirve para hacer sitio.
 
-**La fuente principal también es una pieza** y se arrastra igual que las demás. No ocupa hueco del
-tope, no se puede tirar a la papelera y no se la lleva una bomba — sin ella el lienzo se queda sin
-arena y sin forma de recuperarla.
+**La fuente principal también es una pieza** y se arrastra, se vuela y se tira a la papelera igual
+que las demás. Lo único que le queda de excepción es que no ocupa hueco del tope y que vaciar el
+lienzo la repone. Llegó a ser indestructible, con el argumento de que sin ella no hay arena; era el
+argumento equivocado, porque quien la vuela sabe lo que hace y del dock salen fuentes nuevas. Ser la
+única pieza a la que una bomba no le hacía nada se notaba, y mal. Volada, revienta como cualquiera y
+se rehace a los dos segundos y medio.
 
 **Cualquier pieza que pille dentro una explosión se enciende**, arde dos segundos con su aro de
 alcance y su arco de cuenta atrás, y revienta a su vez. Una bola encendida sigue rebotando mientras
@@ -130,7 +136,7 @@ src/
     physics.ts             el automata celular
     ejecta.ts              arena en vuelo balistico (explosiones y aventado)
     dock.ts                dock de piezas: arrastrar, mover, tirar
-    gadgets/               piezas: cruz, plataforma, bomba, fuente, bola, y la explosión
+    gadgets/               piezas: bomba, fuente, bola, y la explosión
     grid.ts, materials.ts, palette.ts, render.ts, rng.ts, color/extract.ts
   lib/nowPlaying.ts        poller cliente
 php/                       los dos endpoints en PHP, por si va a un VPS/cPanel
@@ -221,24 +227,17 @@ Cosas que parecen arbitrarias en el código y no lo son:
   sobre la lista, y no es estilo: en un solo recorrido, una pieza borraría el cuerpo recién escrito
   de la que va detrás, y dos piezas que se tocan parpadearían y dejarían pasar la arena por la
   junta.
-- **Ninguna pieza toca `physics.ts`.** La cruz funciona por el desplazamiento que ya hacía
-  `Grid.stamp()`, y la plataforma traslada su carga por su cuenta. La única rama que se le ha
-  añadido nunca al bucle caliente es la deriva lateral de la caída libre, que no es de ninguna pieza
-  sino de la caída misma (ver abajo).
-- **La plataforma traslada su carga a mano, y hubo que llegar hasta ahí por descarte.** Primero fue
-  una barra sólida y se escurría por debajo del montón: el suelo se retira de la celda que abandona
-  y lo que había encima se cuela por el hueco. Después fue material de cinta (`BELT_L`/`BELT_R`),
-  aprovechando el arrastre por rozamiento que `physics.ts` llevaba escrito y sin usar desde la
-  fábrica original. Parecía la respuesta y no lo era: **la cinta no puede mover una carga compacta**.
-  El arrastre es un paso lateral y `slideLateral` exige la celda de destino vacía, así que en una
-  bandeja llena el único grano que puede moverse es el de delante de cada capa — y ése está contra
-  el costado. Medido: salía de debajo del chorro con 124 granos y llegaba al otro extremo con 22.
-  Los otros 102 no se caían por ningún sitio; nunca se movieron, y la bandeja se fue de debajo.
-  Trasladando la carga en bloque cada vez que avanza una celda, llega entera: 200 de 200.
-- **Los costados son media pieza, no un adorno.** Un montón tiene su ángulo de reposo, así que en
-  cuanto es más alto que media barra su falda sobresale por los dos extremos y se descuelga por
-  ellos. Sin costados, lo que le cae encima acaba al lado de donde cayó y la plataforma no aleja el
-  material de su origen, que es justamente para lo que se pone.
+- **Ninguna pieza toca `physics.ts`.** Todas se apoyan en lo que el autómata ya hacía —el
+  desplazamiento de `Grid.stamp()`, la caída normal— o se lo montan por su cuenta fuera del bucle.
+  La única rama que se le ha añadido nunca al bucle caliente es la deriva lateral de la caída libre,
+  que no es de ninguna pieza sino de la caída misma (ver abajo).
+- **La física de cintas no mueve una carga compacta.** Lo descubrió la plataforma, que ya no está,
+  pero el `BELT_L`/`BELT_R` de `physics.ts` sigue ahí y volverá a tentar a quien quiera transportar
+  algo. El arrastre por rozamiento es un paso lateral y `slideLateral` exige la celda de destino
+  vacía, así que en una bandeja llena el único grano que puede moverse es el de delante de cada capa
+  — y ése está contra el costado. Medido: salía de debajo del chorro con 124 granos y llegaba al
+  otro extremo con 22, y los 102 que faltaban no se caían por ningún sitio: nunca se movieron. Lo
+  que viaja en bloque hay que trasladarlo a mano.
 - **El hueco de la bomba va por encima del tope, no reservando uno de los diez.** Con el lienzo lleno,
   la única forma de quitar algo era arrastrarlo hasta la papelera de una en una. Guardar un hueco
   para la bomba convierte volarlo todo en una opción siempre disponible, y quitarle un sitio a las
@@ -254,15 +253,11 @@ Cosas que parecen arbitrarias en el código y no lo son:
   `rescale()` movía `cx`/`cy` sin llamar a `onMoved()`, así que un emisor colocado acababa
   pintándose en el sitio nuevo y sembrando en el viejo. Se ve en cuanto la fuente fija pasa a ser una
   pieza, pero llevaba ahí desde que hay emisores.
-- **Se arrastra la plataforma para descargarla.** No hace falta un punto de volcado: al recolocarla
-  el cuerpo se estampa en el sitio nuevo y la carga se queda donde estaba, en el aire, y cae. Que la
-  única forma de vaciarla sea cogerla y llevarla es coherente con el resto — aquí todo se hace con
-  el dedo encima del lienzo.
 - **El grano que una pieza no consigue apartar sale volando, no se destruye.** `displaceSand()` lo
-  eliminaba cuando no había hueco donde meterlo, y eso vacía la escena poco a poco: medido, una sola
-  cruz bajo el chorro se comía 337 granos en 5 s, un 15% del caudal, y el lienzo dejaba de llenarse
-  sin que nada lo explicara. Ahora hay un `Grid.overflow` que lo lanza. Además de conservar la masa
-  es lo correcto: una rueda de paletas avienta lo que no puede apartar.
+  eliminaba cuando no había hueco donde meterlo, y eso vacía la escena poco a poco: medido con la
+  cruz giratoria que hubo, una sola bajo el chorro se comía 337 granos en 5 s, un 15% del caudal, y
+  el lienzo dejaba de llenarse sin que nada lo explicara. Ahora hay un `Grid.overflow` que lo lanza.
+  Además de conservar la masa es lo correcto: lo que una pieza no puede apartar, lo avienta.
 - **La arena en vuelo vive fuera del autómata.** `Grid.vel` es un `Uint8Array` de caída vertical y
   no sabe representar un grano disparado en diagonal. Meter velocidad vectorial en el grid
   engordaría el bucle caliente —que despacha 90.000 granos en 1,4 ms— a cambio de un efecto que dura
@@ -278,16 +273,14 @@ Cosas que parecen arbitrarias en el código y no lo son:
   subida por la columna cubre a los que una explosión lanza contra el fondo: en un montón siempre
   hay aire por encima, y un grano que reaparece en la superficie se nota muchísimo menos que un
   grano que desaparece.
-- **La cruz se dibuja sin aro exterior.** La rueda original lo llevaba, pero aquí mentía: el aro
-  sugiere una llanta sólida y lo único sólido son las aspas, así que se veía la arena atravesar
-  limpiamente una circunferencia dibujada. Lo que se pinta tiene que ser lo que para la arena.
-- **El sentido en que la cruz avienta se calcula celda a celda.** La rueda original estampaba sin
-  `pushDir`, así que el grano barrido salía hacia donde dictase la paridad de su celda y la rueda
-  escupía siempre al mismo lado girase como girase. El sentido correcto es el de la velocidad
-  tangencial: arriba del eje se barre hacia un lado y abajo hacia el contrario.
+- **Lo que se pinta tiene que ser lo que para la arena.** La cruz giratoria que hubo llevaba al
+  principio un aro exterior, heredado de la rueda de paletas de la fábrica original, y mentía: el
+  aro sugiere una llanta sólida y lo único sólido eran las aspas, así que se veía la arena atravesar
+  limpiamente una circunferencia dibujada. La regla sigue mandando en el aro de alcance de la bomba.
 - **`onMoved()` también se llama al colocar, no solo al arrastrar.** El fantasma se instancia fuera
-  de la pantalla y luego se le asigna el sitio de golpe; sin avisarlo, la plataforma seguía
-  centrando su patrulla en la esquina imposible donde nació y se iba a rebotar fuera del mundo.
+  de la pantalla y luego se le asigna el sitio de golpe; sin avisarlo, una pieza que ate estado a su
+  posición —la fuente guarda su boquilla aparte— se queda pintándose donde toca y actuando donde
+  estaba.
 - **El aviso al dock se deduce de comparar el contador.** La bomba se consume sola dentro del bucle
   de simulación, donde no hay ningún gesto del usuario del que colgar la notificación: acordándose
   de avisar en cada sitio que añade o quita, su hueco se quedaba sin liberar y el dock seguía
@@ -296,9 +289,15 @@ Cosas que parecen arbitrarias en el código y no lo son:
   solo se descubre después de haber arrastrado una pieza hasta allí, es decir, después de haber
   adivinado que existe. La primera persona que lo probó preguntó justo eso: cómo se borra algo que
   no sea una bomba.
-- **La posición de esa × se fija al señalar la pieza y no se recalcula.** La plataforma patrulla,
-  así que un botón atado a su centro se aparta mientras vas a pulsarlo: el ratón llega a donde
-  estaba y la pieza ya no. Un botón no puede huir del cursor.
+- **La posición de esa × se fija al señalar la pieza y no se recalcula mientras siga señalada.** Un
+  botón atado al centro de una pieza que se mueve sola se aparta mientras vas a pulsarlo: el ratón
+  llega a donde estaba y la pieza ya no. Un botón no puede huir del cursor. Pero sí hay que soltar la
+  marca al terminar un arrastre, y no hacerlo era un fallo que costó entender: el botón se quedaba en
+  el punto donde la pieza estaba antes de moverla, así que pulsar donde se veía la × dibujaba una
+  pared. Se leía como "esta pieza no se puede quitar".
+- **Y donde no se pueda pulsar, no vale.** La fuente de serie vive en la fila 0 y su × caía por
+  encima del borde superior: invisible e imposible de acertar, justo en la pieza de la que más gente
+  quiere deshacerse. Si arriba no cabe, se pone debajo.
 - **A la papelera se le pregunta antes de soltarla.** `isTrash` exige que el dock esté en modo
   papelera y `onRelease` es justo lo que le quita ese modo, así que llamándolo primero la pregunta
   salía siempre que no y tirar una pieza al dock no borraba nada.
@@ -331,8 +330,13 @@ Cosas que parecen arbitrarias en el código y no lo son:
 - **La bola no tiene cuerpo sólido en el grid.** Podría estamparse como `DYN` para que la arena
   chocara con ella, pero sería trabajo tirado: lo que hay dentro de su radio deja de existir en el
   mismo paso, así que nunca habría nada contra lo que chocar.
+- **El tamaño de la bola es una fracción del ancho del lienzo, no un número de celdas.** En celdas
+  fijas, la misma bola medía 13 en todas partes: el 6% del ancho en escritorio y el 27% en un móvil,
+  que tiene 97 celdas de ancho contra 400. La misma pieza se comía media pantalla sólo por cambiar
+  de aparato. Atada al ancho, ocupa la misma porción de escena en los dos sitios, y lo que barre por
+  segundo —en fracción de lienzo— deja de depender del dispositivo.
 - **El radio de agarre y el sitio que ocupa una pieza son dos números distintos** (`radius` y
-  `footprint`). La bola infla su agarre a 18 celdas para poder cogerse en marcha —a 145 celdas/s
+  `footprint`). La bola infla su agarre cinco celdas por encima de la bola para poder cogerse en marcha —a 145 celdas/s
   cruza el cursor en una décima de segundo—, y mientras fueron el mismo número esa holgura se colaba
   en las reglas de colocación: exigía 36 celdas entre dos bolas y se negaba a soltar la quinta,
   justo cuando echar varias es como se usa.
@@ -357,7 +361,7 @@ Cosas que parecen arbitrarias en el código y no lo son:
   lo único distinto es el cuerpo que dejan de estampar mientras arden. Con una clase `Wick` aparte,
   añadírsela a una pieza son tres líneas; repitiéndolo en cada clase estaría condenado a que se
   fueran separando a la primera corrección. La bomba no tiene mecha propia: lleva la misma, sólo que
-  nace encendida, y ésa es toda la diferencia entre una bomba y una cruz a la que le ha estallado
+  nace encendida, y ésa es toda la diferencia entre una bomba y una fuente a la que le ha estallado
   algo al lado.
 - **Lo que se enciende arde los mismos dos segundos, aunque sea más rápido.** Una bola encendida
   recorre en ese tiempo media pantalla rebotando, y esa carrera —con el aro del alcance por delante
@@ -368,9 +372,14 @@ Cosas que parecen arbitrarias en el código y no lo son:
   estallar nunca. Y de paso sale gratis lo que se quería para las bombas: a lo que ya era una bomba
   no hay que convencerlo con dos segundos de mecha, así que una fila cae en cascada rápida.
 - **Mientras arde el anillo de choque, la pieza no vuelve a estampar su cuerpo.** El cráter tiene que
-  quedar abierto: unas aspas intactas en medio de la explosión que acaba de llevárselas serían justo
-  lo contrario de lo que ha pasado. A la plataforma eso le tira la carga, que es exactamente lo que
-  le pasa a un carro al que le vuelan el suelo.
+  quedar abierto: una pieza intacta en medio de la explosión que acaba de llevársela sería justo lo
+  contrario de lo que ha pasado. A la fuente eso le corta el chorro, que es lo que tiene que pasarle
+  a una boquilla reventada.
+- **La fuente de serie también arde, pero vuelve.** Era la única pieza inmune a una bomba, con el
+  argumento de que sin ella el lienzo se queda sin arena; el argumento era malo, porque quien la
+  vuela sabe lo que hace y del dock salen fuentes nuevas. Ahora revienta como cualquiera, deja el
+  lienzo sin chorro dos segundos y medio —que es la gracia— y se rehace. También se puede tirar a la
+  papelera, y vaciar el lienzo la repone.
 - **El contagio lo reparte la capa al terminar la ronda, no la bomba al estallar.** Por lo mismo que
   el choque entre bolas: prender a otro es cosa de la pareja. Y repartiéndolo después, una cadena
   tarda un paso por eslabón en vez de resolverse entera en un solo fotograma, que es lo que la hace
@@ -389,3 +398,10 @@ Está guardada en el primer commit del repositorio (`git log`), por si algún d�
 el generador o el vocabulario de máquinas. La física de cintas y rampas sigue viva en `physics.ts`
 aunque ahora no se use — la plataforma llegó a apoyarse en ella y acabó no pudiendo, ver arriba. Es
 la base si alguna vez se quiere una segunda materia dibujable.
+
+De este proyecto también se han caído dos piezas por el camino, la **cruz giratoria** y la
+**plataforma**, y por una razón distinta a la de la fábrica: funcionaban. Se quitaron porque las
+tres que quedan se explican solas y se combinan entre ellas, y las otras dos pedían entenderlas
+antes de que hicieran gracia. Están enteras en el commit `b52c517`, con lo último que llegaron a
+hacer: colocarse en dos tiempos —un punto para situarlas y otro para darles su medida— y, en el caso
+de la plataforma, pasear su carga por un trayecto inclinado a modo de rampa.
