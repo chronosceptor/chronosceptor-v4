@@ -26,7 +26,7 @@ export const NOZZLE_H = 14;
  * punta del cano. Una fuente colocada mas arriba que esto no pinta el dibujo y
  * cae al trazo, que si cabe.
  */
-export const NOZZLE_SPRITE_ROWS = 41;
+export const NOZZLE_SPRITE_ROWS = 31;
 
 export interface Profile {
   name: 'desktop' | 'portrait';

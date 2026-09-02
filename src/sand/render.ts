@@ -16,7 +16,7 @@ import { NOZZLE_H } from './world';
  * pieza entera, y con un cano fino la tolva se va a un tamano absurdo — el
  * primer dibujo tenia un 12% y pedia 275 px de ancho.
  */
-const SPOUT_FRAC = 0.3;
+const SPOUT_FRAC = 0.28;
 
 /**
  * Celdas que el dibujo de la fuente baja por debajo de su fila de siembra.
@@ -40,6 +40,25 @@ export interface DrawCtx {
 }
 
 /**
+ * Lo que ocupa el dibujo de la tolva, en celdas y relativo a su boca.
+ *
+ * Sirve para que el area de agarre sea lo que se ve y no un circulo pegado a la
+ * boca: la pieza se dibuja casi entera *por encima* de su fila de siembra, asi
+ * que un radio centrado ahi deja fuera toda la tolva y solo se puede coger por
+ * un trocito del cano.
+ *
+ * Va en celdas y no en pixeles porque `s` se cancela: el ancho sale de `half`,
+ * que ya esta en celdas, y de `SPOUT_FRAC`, que es una proporcion.
+ */
+export function nozzleBox(half: number): { half: number; up: number; down: number } {
+  const img = sprite('fuente');
+  if (!img) return { half: (half + 1.5) * 2.6, up: NOZZLE_H, down: 0 };
+  const halfW = (half + 1.5) / SPOUT_FRAC;
+  const alto = halfW * 2 * (img.naturalHeight / img.naturalWidth);
+  return { half: halfW, up: alto - SOLAPE, down: SOLAPE };
+}
+
+/**
  * Tolva de una fuente de material: cuerpo por encima y garganta en (`x`, `y`).
  *
  * Vive aqui y no en el renderer porque la comparten la fuente fija de la escena
@@ -60,25 +79,6 @@ export interface DrawCtx {
  * cano estrecho sobre un chorro ancho es la misma mentira que un aro que no
  * para nada.
  */
-/**
- * Lo que ocupa el dibujo de la tolva, en celdas y relativo a su boca.
- *
- * Sirve para que el area de agarre sea lo que se ve y no un circulo pegado a la
- * boca: la pieza se dibuja casi entera *por encima* de su fila de siembra, asi
- * que un radio centrado ahi deja fuera toda la tolva y solo se puede coger por
- * un trocito del cano.
- *
- * Va en celdas y no en pixeles porque `s` se cancela: el ancho sale de `half`,
- * que ya esta en celdas, y de `SPOUT_FRAC`, que es una proporcion.
- */
-export function nozzleBox(half: number): { half: number; up: number; down: number } {
-  const img = sprite('fuente');
-  if (!img) return { half: (half + 1.5) * 2.6, up: NOZZLE_H, down: 0 };
-  const halfW = (half + 1.5) / SPOUT_FRAC;
-  const alto = halfW * 2 * (img.naturalHeight / img.naturalWidth);
-  return { half: halfW, up: alto - SOLAPE, down: SOLAPE };
-}
-
 export function drawNozzle({ ctx, s }: DrawCtx, x: number, y: number, half: number): void {
   const px = (x + 0.5) * s;
   const boca = y * s;
