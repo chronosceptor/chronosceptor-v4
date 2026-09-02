@@ -18,8 +18,8 @@ que las scanlines del fondo van por debajo del canvas y no por encima.
 
 | Pieza | Geometría en el código | En pantalla |
 | --- | --- | --- |
-| Fuente | tolva trapezoidal + caño (`NOZZLE_H` = 14, semiancho 4) | ~86 × 42 px |
-| Bola | círculo macizo, radio 10 celdas | 60 px de diámetro |
+| Fuente | escalada por su caño (`SPOUT_FRAC`), no por un tamaño fijo | 118 × 91 px |
+| Bola | círculo dibujado, radio 10 celdas | 60 px de diámetro |
 | Bomba | círculo hueco, `BODY_R` = 3 celdas | 18 px de diámetro |
 
 **La bomba a 18 px no aguanta una ilustración.** Es un tercio de la bola: a ese tamaño
@@ -50,7 +50,14 @@ a few bolts along the top rim. The spout mouth at the bottom is open, dark and e
 nothing is pouring out of it and there is nothing below it. The top opening is empty too.
 ```
 
-## Bola
+## Bola — descartada, se dibuja en código
+
+**No generes este asset.** Se probó y se tiró: a los 60 px a los que se pinta de verdad, la
+foto perdía el semitono en el remuestreo y dejaba el borde blando, y sobre todo traía la luz
+pintada dentro cuando la luz es de la escena. Ahora sale de cuatro degradados en `ball.ts`.
+El porqué completo está en el README, en «Decisiones no obvias».
+
+El prompt se queda aquí solo como registro de lo que se intentó.
 
 Rueda y rebota en cualquier dirección, así que **no puede tener arriba ni abajo**:
 cualquier detalle orientado se verá mal en cuanto se mueva.
@@ -128,8 +135,7 @@ Si aun así te mete escenario, repite la frase al final del prompt.
 Un comando por pieza. Quita el fondo, recorta al contenido y exporta al ancho pedido:
 
 ```sh
-python3 scripts/asset-alfa.py descarga.png public/piezas/bola.png 120
-python3 scripts/asset-alfa.py descarga.png public/piezas/fuente.png 172
+python3 scripts/asset-alfa.py descarga.png public/piezas/fuente.png 236
 python3 scripts/asset-alfa.py descarga.png public/piezas/bomba.png 80
 ```
 
@@ -169,6 +175,10 @@ borde de arriba.
 
 | Pieza | Prompt | Asset |
 | --- | --- | --- |
-| Bola | listo | `public/piezas/bola.png` (120 × 120) |
-| Fuente | listo | `public/piezas/fuente.png` (220 × 242), caño al 30 % |
+| Bola | descartado | **ninguno** — se dibuja en `ball.ts`, ver arriba |
+| Fuente | listo | `public/piezas/fuente.png` (236 × 181), `SPOUT_FRAC` 0,28 |
 | Bomba | listo | pendiente, y antes hay que subir `BODY_R` |
+
+Los PNG de `public/piezas/` **sí se versionan**, por una excepción en `.gitignore`. Sin ella
+producción salía con la fuente a trazo vectorial mientras en local se veía el dibujo. Al
+añadir una pieza nueva, compruébalo con `git check-ignore -v public/piezas/x.png`.
