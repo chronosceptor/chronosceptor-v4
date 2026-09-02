@@ -19,6 +19,11 @@ versionado según [SemVer](https://semver.org/lang/es/).
   fracción que ocupa el caño y que decide la escala de la pieza entera.
 - **`docs/prompts-piezas.md`**: los prompts de las tres piezas del dock, con el bloque de estilo
   repetido a propósito en los tres para que salgan como una familia.
+- **Los dibujos de las piezas se cargan sobre su trazo vectorial, que sigue ahí** (`sprites.ts`).
+  La imagen tarda varios frames en llegar por red, y sin el vectorial debajo la pieza recién soltada
+  no está durante un instante — se lee como que el gesto no ha funcionado y se suelta otra. Vale
+  igual si el PNG falta o da 404: como `public/piezas/*.png` no se versiona, un clon limpio
+  funciona entero y se ve con las piezas dibujadas a trazo.
 
 ### Changed
 
