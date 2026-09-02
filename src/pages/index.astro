@@ -12,7 +12,7 @@ import Dock from '../components/Dock.astro';
     <title>chronosceptor</title>
     <meta
       name="description"
-      content="Draw to divert the sand. The colours come from whatever I am listening to."
+      content="Draw to divert the sand. Pick the colour it falls in."
     />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
 
@@ -22,7 +22,7 @@ import Dock from '../components/Dock.astro';
     <meta property="og:title" content="Sandbox" />
     <meta
       property="og:description"
-      content="Draw to divert the sand. The colours come from whatever I am listening to."
+      content="Draw to divert the sand. Pick the colour it falls in."
     />
     <meta name="twitter:card" content="summary" />
   </head>
@@ -53,13 +53,8 @@ import Dock from '../components/Dock.astro';
 <script>
   import { boot } from '../sand';
   import { mountDock } from '../sand/dock';
-  import { watchNowPlaying } from '../lib/nowPlaying';
-  import { paletteFromImage } from '../sand/color/extract';
-  import { DEFAULT_PALETTE } from '../sand/palette';
 
   const params = new URLSearchParams(location.search);
-  /** `?mock` sirve un track fijo: permite afinar el color sin API key. */
-  const mock = params.has('mock');
 
   const app = boot({
     sandCanvas: document.getElementById('arena') as HTMLCanvasElement,
@@ -81,8 +76,11 @@ import Dock from '../components/Dock.astro';
     clearTimeout(idleTimer);
     idleTimer = window.setTimeout(() => {
       // Con una pieza en la mano el dock es la papelera: desvanecerlo justo
-      // entonces dejaria el gesto sin destino a la vista.
-      if (!dock.classList.contains('papelera')) dock.classList.add('reposo');
+      // entonces dejaria el gesto sin destino a la vista. Con el panel de
+      // paletas abierto, igual: es una eleccion a medio hacer.
+      if (!dock.classList.contains('papelera') && !dock.classList.contains('paleta')) {
+        dock.classList.add('reposo');
+      }
     }, 7000);
   }
   for (const evt of ['pointermove', 'pointerdown', 'keydown'] as const) {
@@ -91,30 +89,4 @@ import Dock from '../components/Dock.astro';
 
   mountDock(app, dock, wake);
   wake();
-
-  // --- Enlace entre la musica y la arena -----------------------------------
-  //
-  // La cancion no se muestra en ninguna parte: lo unico que sale de ella es el
-  // color. Se sigue sondeando porque hace falta saber que suena para pedir su
-  // portada, pero el titulo y el artista no llegan a pintarse.
-
-  watchNowPlaying(
-    async (track) => {
-      if (!track) {
-        // Sin musica sonando se vuelve a la paleta ocre; el regreso del color
-        // al dar play es lo que hace visible que la pagina esta escuchando.
-        app.setPalette(DEFAULT_PALETTE);
-        return;
-      }
-
-      let palette = DEFAULT_PALETTE;
-      if (track.art) {
-        const extracted = await paletteFromImage(track.art, `${track.artist}|${track.title}`);
-        if (extracted) palette = extracted;
-      }
-      app.setPalette(palette);
-    },
-    20000,
-    mock ? '/api/now-playing?mock=1' : '/api/now-playing',
-  );
 </script>

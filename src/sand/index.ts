@@ -80,8 +80,6 @@ export interface SandApp {
 
 const SIM_HZ = 60;
 const SIM_DT = 1 / SIM_HZ;
-/** Pausa entre canciones antes de que empiece a caer la paleta nueva. */
-const SHIFT_PAUSE = 1.2;
 
 export function boot(opts: BootOptions): SandApp {
   const { sandCanvas, fxCanvas } = opts;
@@ -89,8 +87,6 @@ export function boot(opts: BootOptions): SandApp {
   const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 
   let palette: Palette = DEFAULT_PALETTE;
-  let pending: Palette | null = null;
-  let shift = 0;
 
   let world!: World;
   let renderer!: Renderer;
@@ -387,30 +383,11 @@ export function boot(opts: BootOptions): SandApp {
     const { grid, source, drain, profile } = world;
     drain.tick(grid, source.blocked);
 
-    // Durante la pausa entre canciones no siembra nadie: presupuesto cero para
-    // las piezas emisoras tambien, no solo para la fuente principal.
-    const paused = shift > 0;
     const headroom = (): number => Math.max(0, profile.maxSand - grid.sandCount);
 
-    gadgets.tick(
-      { grid, ejecta, palette, rand, budget: paused ? 0 : headroom() },
-      dt,
-    );
+    gadgets.tick({ grid, ejecta, palette, rand, budget: headroom() }, dt);
     // Una pieza puede haberse consumido sola (la bomba al estallar).
     if (gadgets.count !== announced) announce();
-
-    // La fuente principal no tiene camino propio: siembra dentro del paso de
-    // las piezas, como los emisores que se colocan. Aqui solo queda lo que sigue
-    // siendo del mundo y no de la pieza — el lote de color de cada cancion.
-    if (paused) {
-      shift -= dt;
-      if (shift <= 0 && pending) {
-        palette = pending;
-        pending = null;
-        // Cancion nueva, lote nuevo: el color arranca de inmediato.
-        source.newBatch();
-      }
-    }
 
     ejecta.step(grid, dt);
     step(grid, rand, frame++);
@@ -609,9 +586,11 @@ export function boot(opts: BootOptions): SandApp {
       input?.destroy();
     },
     setPalette(p: Palette): void {
-      if (p.id === palette.id && !pending) return;
-      pending = p;
-      shift = SHIFT_PAUSE;
+      if (p.id === palette.id) return;
+      palette = p;
+      // Paleta nueva, lote nuevo: la eleccion se ve en el chorro al instante.
+      // Los granos ya asentados conservan la suya, que es lo que estratifica.
+      world.source.newBatch();
     },
     clear(): void {
       gadgets.clearAll(world.grid);
@@ -685,7 +664,7 @@ export function boot(opts: BootOptions): SandApp {
     },
 
     get palette(): Palette {
-      return pending ?? palette;
+      return palette;
     },
     inspect() {
       const { awake, size } = world.grid;

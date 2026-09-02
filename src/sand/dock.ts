@@ -1,4 +1,8 @@
 import type { GadgetKind, SandApp } from './index';
+import { paletteById } from './palette';
+
+/** Donde se guarda la paleta elegida. */
+const CLAVE = 'chronosceptor:paleta';
 
 /**
  * Cablea el dock con el lienzo.
@@ -35,6 +39,8 @@ export function mountDock(app: SandApp, root: HTMLElement, onActivity: () => voi
     },
     onGrab() {
       root.classList.add('papelera');
+      // El panel de paletas vive donde va a caer la papelera.
+      abrirPaletas(false);
       // El dock puede estar desvanecido cuando se agarra una pieza; sin esto no
       // habria adonde apuntar para tirarla.
       onActivity();
@@ -79,6 +85,76 @@ export function mountDock(app: SandApp, root: HTMLElement, onActivity: () => voi
 
     on(chip, 'pointercancel', () => app.cancelPlacement());
   }
+
+  // --- Color de la arena ----------------------------------------------------
+  //
+  // El color no es un modo ni una herramienta activa: se elige una vez y se
+  // queda. Por eso el panel se cierra solo al elegir y la eleccion sobrevive a
+  // la recarga — volver a la ocre en cada visita seria deshacer lo que se pidio.
+
+  const boton = root.querySelector<HTMLButtonElement>('#dock-color');
+  const disco = root.querySelector<HTMLElement>('#dock-color-disco');
+  const muestras = Array.from(root.querySelectorAll<HTMLButtonElement>('.muestra'));
+
+  function abrirPaletas(abierto: boolean): void {
+    root.classList.toggle('paleta', abierto);
+    boton?.setAttribute('aria-expanded', String(abierto));
+  }
+
+  function elegir(id: string, persistir = true): void {
+    const muestra = muestras.find((m) => m.dataset.palette === id);
+    if (!muestra) return;
+    app.setPalette(paletteById(id));
+    for (const m of muestras) m.setAttribute('aria-pressed', String(m === muestra));
+    // El disco del boton es la muestra elegida: se le copia el fondo en vez de
+    // rehacer el degradado, que ya se calculo al compilar.
+    if (disco) disco.style.background = muestra.style.background;
+    if (!persistir) return;
+    try {
+      localStorage.setItem(CLAVE, id);
+    } catch {
+      /* modo privado o almacenamiento lleno: la eleccion dura la sesion */
+    }
+  }
+
+  if (boton) {
+    on(boton, 'click', () => {
+      abrirPaletas(!root.classList.contains('paleta'));
+      onActivity();
+    });
+  }
+
+  for (const muestra of muestras) {
+    on(muestra, 'click', () => {
+      const id = muestra.dataset.palette;
+      if (id) elegir(id);
+      abrirPaletas(false);
+      onActivity();
+    });
+  }
+
+  // Se cierra al tocar fuera o con Escape. Sin esto el panel se queda abierto
+  // sobre la escena y se dibuja debajo de el sin verlo.
+  const fuera = (e: PointerEvent): void => {
+    if (!root.contains(e.target as Node)) abrirPaletas(false);
+  };
+  const escape = (e: KeyboardEvent): void => {
+    if (e.key === 'Escape') abrirPaletas(false);
+  };
+  document.addEventListener('pointerdown', fuera, true);
+  document.addEventListener('keydown', escape);
+  off.push(() => document.removeEventListener('pointerdown', fuera, true));
+  off.push(() => document.removeEventListener('keydown', escape));
+
+  let guardada: string | null = null;
+  try {
+    guardada = localStorage.getItem(CLAVE);
+  } catch {
+    /* sin almacenamiento: arranca con la de serie */
+  }
+  // Por `id` resuelto y no por el bruto: un id de una version anterior cae en la
+  // de serie en vez de dejar el boton sin muestra marcada.
+  elegir(paletteById(guardada).id, false);
 
   return () => {
     for (const fn of off) fn();

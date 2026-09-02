@@ -1,7 +1,8 @@
 # CLAUDE.md
 
 Lienzo de física: cae arena, el usuario dibuja paredes que la desvían, y el color sale de
-la portada del disco que suena (Last.fm). Astro estático + 2 endpoints serverless.
+la paleta que elija en el dock. Astro **enteramente estático**: ya no hay endpoints, ni
+variables de entorno, ni nada que resolver en servidor.
 
 La justificación de fondo de cada decisión de física está en el README, sección
 **"Decisiones no obvias"**. Léela antes de tocar `src/sand/`.
@@ -13,7 +14,6 @@ La justificación de fondo de cada decisión de física está en el README, secc
   `export PATH="$HOME/.nvm/versions/node/v22.23.1/bin:$PATH"` en cada shell.
 - `npx astro dev` queda **corriendo en segundo plano** entre invocaciones. `astro dev stop`
   para matarlo, `astro dev logs` para leerlo.
-- No hay PHP instalado: `php/*.php` nunca se ha ejecutado ni pasado `php -l`.
 - **`*.png` está en `.gitignore`, con dos excepciones: `docs/` y `public/piezas/`.** Esa segunda
   hubo que añadirla porque producción salía con la fuente a trazo vectorial mientras en local se
   veía el dibujo: el respaldo funcionaba tan bien que el fallo no parecía un fallo. Si añades una
@@ -46,16 +46,35 @@ La justificación de fondo de cada decisión de física está en el README, secc
   `MutationObserver` para quitarle la clase `reposo`: nunca llegó a estar "quieto", la captura se
   colgó y con ella toda la sesión de navegador —`browser_close` y `browser_navigate` empezaron a
   dar timeout—. Para ver el dock, fuérzale `style.opacity` sin observador y captura la página
-  entera.
+  entera. **Y aun así se cuelga**: la de página completa funcionó una vez tras navegar y luego
+  empezó a dar timeout en «fonts loaded» una y otra vez, porque el bucle de arena nunca deja un
+  fotograma estable que esperar. `browser_evaluate` sigue respondiendo con normalidad mientras
+  tanto, así que no parece que el servidor esté tocado. Cura: `pkill -f mcp-chrome-`, volver a
+  navegar y **`fabrica.destroy()` antes de capturar** — corta el `rAF` y deja la escena quieta.
+- **Para mirar la arena, casi siempre es mejor sacar los píxeles que capturar la pantalla.**
+  `browser_evaluate` con el parámetro `filename` guarda lo que devuelvas, así que un
+  `canvas.toDataURL()` —recortado y ampliado con `drawImage` sobre un canvas auxiliar— baja a
+  disco y se decodifica con `base64`. No se cuelga nunca y da el recorte ya ampliado.
+- **El navegador del MCP corre a ~5 fps** (`inspect().fps` lo dice). La arena se acumula cinco
+  veces más despacio que en pantalla: 349 granos tras 11 s me hizo sospechar del emisor cuando
+  no pasaba nada. Mira `fps` antes de interpretar cualquier serie temporal.
 - **`astro preview` no funciona con el adaptador de Netlify** (el proceso muere antes de
   escuchar), así que no hay forma fácil de medir contra un build de producción.
 - **Verifica que una edición aterrizó antes de medir nada.** Dos reemplazos de texto con
   `python3 .replace()` no encontraron su objetivo y fallaron en silencio; estuve varios
   turnos midiendo código que nunca cambió y culpando a la caché. Usa la herramienta Edit
   (falla en alto) o confirma con `grep` después de escribir.
-- **Nunca `import.meta.env` para secretos de servidor.** Vite lo sustituye por el valor
-  literal al compilar y la API key acaba dentro del artefacto. Van por `astro:env/server`
-  con `access: 'secret'`.
+- **El color ya no viene de fuera: sale de `PALETTES`, en `palette.ts`.** Ocho paletas escritas a
+  mano y no sacadas de un generador — el fondo es `#0B0B0C` y por debajo de ~0,45 de luminancia un
+  grano deja de leerse como arena. Si añades una, mídele la luminancia antes
+  (`0.2126r + 0.7152g + 0.0722b`, sobre 255) y respeta los pesos `3,3,2,1`: a partes iguales la
+  cuenca sale confeti. Si algún día vuelve a haber un endpoint con credenciales, **nunca
+  `import.meta.env` para un secreto** — Vite lo sustituye por el valor literal al compilar y la
+  clave acaba dentro del artefacto; van por `astro:env/server` con `access: 'secret'`.
+- **`setPalette` entra en el mismo fotograma, sin pausa.** Tuvo un `SHIFT_PAUSE` de 1,2 s que
+  paraba la siembra para que el cambio de canción se leyera como un corte; elegido a mano eso es
+  latencia. No lo reintroduzcas: la estratificación la da el color guardado en cada grano, no la
+  pausa.
 - **El sumidero solo puede ir en la última fila.** Repartido en altura, la arena se consume
   en el aire y aparecen huecos negros de la nada.
 - **Instantáneas no miden caudal.** Contar granos por zona en un sistema en flujo da
@@ -120,6 +139,10 @@ La justificación de fondo de cada decisión de física está en el README, secc
 - **El dock tiene tres piezas: fuente, bola y bomba.** Hubo una cruz giratoria y una plataforma, y
   se quitaron enteras aunque funcionaban (commit `b52c517`, con lo último que llegaron a hacer:
   colocación en dos tiempos y trayecto inclinado). No las reintroduzcas por tu cuenta.
+- **El botón de color vive fuera de `#dock-fichas`, y es a propósito.** No se arrastra, y las reglas
+  de `#dock.lleno` / `#dock.solo-bomba` apagan `.ficha`: dentro, se habría apagado con el lienzo al
+  tope. El panel de paletas se posiciona contra `#dock`, que es bloque contenedor de sus hijos
+  absolutos por su `transform` aunque él mismo esté desplazado.
 - **Para comprobar tipos sin disparar el HMR: `npx tsc --noEmit -p tsconfig.json`.** `astro check`
   regenera `.astro/types.d.ts` y eso recarga la página (ver arriba); `tsc` a secas no toca nada.
 - **Editar un archivo mientras se mide deja módulos a medias en el servidor.** Sale un
@@ -169,9 +192,12 @@ Todo desde la consola del navegador, sobre `window.fabrica`:
   px de canvas por celda, con el dpr ya dentro. A tamaño real una pieza mide unos 60 px y ahí se
   pierde casi todo el detalle — mirarla ampliada es lo que evita decidir sobre lo que no se ve.
 
-Parámetros de URL: `?debug=1` (overlay), `?mock=1` (canción fija, sin API key),
-`?fill=0.2` (baja el nivel de disparo del drenaje; sin esto, probar la descarga son varios
-minutos por ciclo).
+Parámetros de URL: `?debug=1` (overlay) y `?fill=0.2` (baja el nivel de disparo del
+drenaje; sin esto, probar la descarga son varios minutos por ciclo).
+
+La paleta elegida vive en `localStorage['chronosceptor:paleta']`. Al medir color, bórralo o
+fíjalo a mano: una sesión anterior deja la página arrancando en un color que no es el de
+serie, y una medida hecha sobre la paleta equivocada no lo parece.
 
 ## Rendimiento
 
@@ -194,6 +220,11 @@ README.
 porque el autómata solo recorre las que tienen arena. Es previo a las piezas.
 
 ## Historia
+
+El color salía de la portada del disco que sonara, vía Last.fm: dos endpoints (`/api/now-playing`,
+`/api/art`), sus gemelos en PHP, un poller y un median-cut en `color/extract.ts`. Se quitó entero
+—no está desconectado, está borrado— porque el color era de quien publicaba la página y no de quien
+la mira. Está en el historial si hace falta recuperarlo.
 
 El primer commit (`253dbfc`) es una versión distinta del proyecto: una fábrica generativa
 con línea de ensamblaje, cintas, balancines y cuenca. Se descartó porque solo se podía

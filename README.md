@@ -12,9 +12,10 @@ que rebota y desportilla, una bomba y una fuente extra de arena. No son adornos 
 lienzo: su cuerpo se estampa en el grid como material sólido y la arena choca con él. La fuente
 principal es una más: se coge, se pone donde quieras y se puede volar.
 
-El color de la arena sale de la portada del disco que estés escuchando, vía Last.fm. Como la fuente
-rota el color por lotes, los montones que atrapes quedan estratificados: al cambiar de canción, el
-color nuevo va sepultando al anterior.
+El color de la arena lo eliges tú: el botón del extremo del dock despliega ocho paletas y la que
+marques queda guardada para la próxima visita. Como la fuente rota el color por lotes, los montones
+que atrapes quedan estratificados, y como cada grano guarda su color ya resuelto, al cambiar de
+paleta el color nuevo va sepultando al anterior en vez de repintarlo.
 
 ## Arranque
 
@@ -25,14 +26,7 @@ npm install
 npm run dev      # http://localhost:4321
 ```
 
-Para que reaccione a la música, copia `.env.example` a `.env` y rellena:
-
-```sh
-LASTFM_API_KEY=   # gratis en https://www.last.fm/api/account/create
-LASTFM_USER=      # tu usuario de Last.fm
-```
-
-Sin esas variables funciona igual, con la paleta ocre por defecto.
+No hay nada que configurar: no lee nada de fuera y no tiene servidor.
 
 ## Cómo se usa
 
@@ -94,8 +88,8 @@ marca exactamente hasta dónde va a llegar.
 
 El fondo tiene un **drenaje con nivel de guarda**: no drena nada hasta que el lienzo se llena casi
 del todo, y entonces abre una boca ancha en el centro y descarga hasta la mitad. Así el ciclo es un
-suceso —llenarse, descargar, volver a llenarse— y cada vuelta trae los colores de otra canción, que
-es lo que hace que se vayan combinando en capas.
+suceso —llenarse, descargar, volver a llenarse— y si de una vuelta a otra cambias de paleta, los
+colores se van combinando en capas.
 
 Sí puede inundarse si dibujas una presa que cruce toda la pantalla — es física honesta, y para eso
 está `Clear`. Las dos últimas filas están reservadas: no se puede dibujar sobre el drenaje.
@@ -107,7 +101,6 @@ El dibujo no se guarda: cada visita empieza en blanco.
 | Parámetro | Para qué |
 |---|---|
 | `?debug=1` | Superpone fps, conteo de arena y paredes, tamaño de grid y modo de brocha |
-| `?mock=1` | Sirve una canción fija con portada local: permite afinar la extracción de color sin API key |
 | `?fill=0.2` | Baja el nivel al que dispara el drenaje. Sin esto, probar la descarga son varios minutos por ciclo |
 
 Desde la consola: `fabrica.inspect()` (arena, paredes, fps, grid, **piezas**, **dónde** está cada
@@ -124,10 +117,8 @@ no encontraron dónde volver. Debe quedarse en cero. Si sube sin parar, algo est
 
 ```
 src/
-  pages/index.astro        pagina + cableado entre la musica y la simulacion
-  pages/api/now-playing.ts proxy de Last.fm (la API key nunca llega al browser)
-  pages/api/art.ts         proxy de portadas (same-origin => canvas legible)
-  components/              isla de canvas y dock de piezas
+  pages/index.astro        pagina + arranque de la simulacion
+  components/              isla de canvas y dock de piezas (fichas y paletas)
   sand/
     world.ts               mundo vacio, fuente y drenaje del fondo
     draw.ts                brocha, interpolacion de trazo, dibujar y borrar
@@ -135,11 +126,10 @@ src/
     index.ts               bucle principal
     physics.ts             el automata celular
     ejecta.ts              arena en vuelo balistico (explosiones y aventado)
-    dock.ts                dock de piezas: arrastrar, mover, tirar
+    dock.ts                dock: arrastrar piezas, tirarlas, y elegir paleta
     gadgets/               piezas: bomba, fuente, bola, y la explosión
-    grid.ts, materials.ts, palette.ts, render.ts, rng.ts, color/extract.ts
-  lib/nowPlaying.ts        poller cliente
-php/                       los dos endpoints en PHP, por si va a un VPS/cPanel
+    palette.ts             las ocho paletas y la mezcla de un grano
+    grid.ts, materials.ts, render.ts, rng.ts
 ```
 
 `src/sand/` no importa nada de Astro: expone `boot({ sandCanvas, fxCanvas })` y se puede mover a
@@ -147,12 +137,8 @@ cualquier otro sitio tal cual.
 
 ## Despliegue
 
-Por defecto sale a Netlify (`@astrojs/netlify`): el sitio es estático salvo los dos endpoints de
-`/api`, que llevan `prerender = false` y se vuelven functions. Las variables de entorno se ponen en
-el panel de Netlify.
-
-Si acaba en un VPS con cPanel, el build estático es el mismo y solo hay que servir
-`php/now-playing.php` y `php/art.php` en `/api/now-playing` y `/api/art`.
+Sale a Netlify (`@astrojs/netlify`), pero el build es **enteramente estático**: no queda ni un
+endpoint ni una variable de entorno. Sirviendo `dist/` en cualquier sitio funciona igual.
 
 ## Decisiones no obvias
 
@@ -169,8 +155,9 @@ Cosas que parecen arbitrarias en el código y no lo son:
 - **Una brocha de una sola celda ya retiene la arena.** La regla diagonal de la física exige que la
   celda lateral también esté libre, así que un trazo fino no gotea y no hay razón para engordarlo.
 - **El color de cada grano se guarda ya resuelto (`Uint32Array`), no como índice de paleta.** Al
-  cambiar de canción los granos viejos conservan su color en vez de remaparse, y por eso los
-  montones quedan estratificados.
+  cambiar de paleta los granos viejos conservan su color en vez de remaparse, y por eso los montones
+  quedan estratificados. Es lo que hace que elegir un color sea un suceso con historia y no un
+  repintado: lo que ya cayó se queda como estaba y lo nuevo lo va sepultando.
 - **Los granos asentados se duermen** y solo los revive un cambio en su vecindario 3x3. Es lo que
   hace que un montón grande y quieto cueste casi nada.
 - **Un grano en caída libre puede irse una celda de lado.** Sin eso el chorro no se abre nunca: los
@@ -185,18 +172,12 @@ Cosas que parecen arbitrarias en el código y no lo son:
   mín-máx de una fila lo fijan dos granos sueltos; la desviación típica de la x dice lo que se ve.
   Arranca en 2,6 celdas por el ancho de la boquilla: con 0,25 apenas se despega de ahí y no se nota,
   y con 0,6 llega a 6,8 en la fila 150 pero deja de leerse como un chorro y parece rociado disperso.
-- **`/api/art` recibe la ruta relativa del CDN, nunca una URL.** El host es una constante del
-  servidor, así que el endpoint no puede convertirse en proxy abierto.
-- **Las credenciales se declaran como secretos de `astro:env`, no se leen con `import.meta.env`.**
-  Vite sustituye `import.meta.env.X` por su valor literal al compilar, así que la API key acababa
-  escrita dentro del artefacto de la función. Declaradas como secretos de servidor se leen del
-  entorno en tiempo de ejecución y nunca se incrustan en el build.
 - **El desplazamiento de un grano barrido sigue la dirección de la pieza que lo empuja.** Una lista
   fija de huecos que mire a la izquierda antes que a la derecha haría que toda pieza en movimiento
   expulsara el material siempre hacia el mismo lado.
 - **El drenaje solo actúa por encima de un nivel de guarda.** Con la fila entera consumiendo
   siempre, lo que no atrapa el dibujo desaparece al tocar el fondo y la pantalla se queda
-  perpetuamente vacía: no da tiempo a ver mezclarse los colores de dos canciones.
+  perpetuamente vacía: no da tiempo a ver mezclarse los colores de dos paletas.
 - **El sumidero va solo en la última fila, nunca repartido en altura.** Se probó estampándolo en V
   sobre varias filas para forzar la forma de embudo: el material se consume en el aire, a la altura
   a la que toca el borde, y aparecen huecos negros de la nada sin que nada llegue a caer hasta
@@ -211,15 +192,20 @@ Cosas que parecen arbitrarias en el código y no lo son:
   cuesta 1,4 ms por frame de un presupuesto de 16,7. Las celdas despiertas se mantienen planas sin
   importar cuánta arena haya, porque los granos asentados se duermen: el coste va con la arena en
   movimiento, no con la total.
-- **Vale el último scrobble reciente, no solo la señal "now playing".** Muchos reproductores nunca
-  mandan esa señal y solo scrobblean la canción al terminarla; mirando únicamente `nowplaying` la
-  página se queda en la paleta por defecto aunque haya música sonando, que es indistinguible de
-  estar rota. Se acepta el último scrobble de los últimos 25 minutos.
-- **La canción no se muestra en ninguna parte.** Hubo una tarjeta con portada, título, artista y
-  estado de escucha, y se quitó: lo interesante es que el color venga de lo que suena, no leer un
-  nombre. Enseñarlo convierte el lienzo en el widget de un reproductor. El sondeo sigue vivo porque
-  hace falta saber qué suena para pedir su portada, pero el título y el artista no llegan a
-  pintarse — sólo entran en la clave de caché de la extracción de color.
+- **Las ocho paletas están escritas a mano, no sacadas de un generador.** El fondo es `#0B0B0C` y un
+  color por debajo de ~0,45 de luminancia deja de leerse como arena: pasa a ser ruido oscuro. Las
+  paletas «trending» de cualquier generador están pensadas sobre blanco y la mitad de sus colores
+  cae ahí. Las de aquí van de 0,49 a 0,96 y están ordenadas por tono, para que la fila del dock se
+  lea como una rueda y no como una lista.
+- **Los cuatro pesos de una paleta (`3, 3, 2, 1`) no son decoración.** Con los cuatro colores igual
+  de probables la cuenca sale confeti: hacen falta dos tonos de masa, un realce claro y un acento
+  suelto para que un montón tenga un color reconocible y los estratos se distingan entre sí. Por eso
+  la muestra del dock es un disco con las cuñas del tamaño de su peso — a cuartos iguales mentiría.
+- **Elegir paleta entra al instante; el cambio de canción no lo hacía.** Cuando el color venía de
+  Last.fm, `setPalette` paraba la siembra 1,2 s para que el corte se leyera como un suceso ajeno.
+  Elegido a mano eso es latencia: se toca un color y no cae hasta pasado más de un segundo. Ahora el
+  lote nuevo arranca en el mismo fotograma, y la estratificación sale igual porque la da el color
+  guardado en cada grano, no la pausa.
 
 ### De las piezas
 
@@ -245,7 +231,7 @@ Cosas que parecen arbitrarias en el código y no lo son:
   devuelve solo: la bomba se consume al estallar.
 - **La fuente principal se homologó a pieza en vez de dársele un arrastre propio.** Envolviéndola en
   el mismo `Emitter` que las colocables —adoptando la `Source` que ya vivía en el mundo, porque el
-  drenaje y los cambios de canción le hablan a ésa— salieron gratis el arrastre, el hit-test, el
+  drenaje y los cambios de paleta le hablan a ésa— salieron gratis el arrastre, el hit-test, el
   estorbar a las demás y el dibujo, y desapareció su camino aparte en el bucle y en el render. Lo
   único que conserva de excepción es que no cuenta para el tope, no se tira y no se la lleva una
   bomba.
@@ -407,6 +393,16 @@ Cosas que parecen arbitrarias en el código y no lo son:
   esfera de arena de debajo se quedaría tan tranquila.
 
 ## Historia
+
+**El color venía de la música.** Durante casi todo el proyecto la paleta salía de la portada del
+disco que sonara, vía Last.fm: dos endpoints serverless —uno de proxy de la API con la clave a
+salvo en el servidor, otro de proxy de portadas para que el canvas se pudiera leer—, un poller en
+cliente y un median-cut que sacaba cinco colores de la carátula y descartaba los que no se leían
+sobre el fondo. Funcionaba y era la idea que definía la página, pero el color era de quien la
+publicaba, no de quien la miraba: el visitante veía lo que a otro le apetecía escuchar y no tenía
+manera de tocarlo. Se cambió por ocho paletas y un botón. Está entero en el historial, endpoints
+PHP equivalentes incluidos, por si algún día se quiere recuperar el enlace con la música — el
+extractor de color es lo que más costó y sigue ahí.
 
 Antes de esto el proyecto fue una **fábrica generativa**: una línea de ensamblaje en serpentina con
 cintas transportadoras, balancines, ruedas de paletas y una cuenca con palanca de vaciado, todo

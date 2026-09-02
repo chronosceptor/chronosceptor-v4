@@ -8,14 +8,35 @@
  * borrar que buscar.
  */
 
+import { PALETTES, rgbCss, type Palette } from '../sand/palette';
+
 const PIEZAS = [
   { kind: 'emitter', label: 'Fuente' },
   { kind: 'ball', label: 'Bola: rebota y se come la arena' },
   { kind: 'bomb', label: 'Bomba' },
 ] as const;
+
+/**
+ * El disco de una paleta: una cuna por color, del tamano de su peso.
+ *
+ * Con las cuatro cunas iguales, la muestra miente — dice que la paleta es
+ * cuatro colores a partes iguales cuando el ultimo apenas aparece en la arena.
+ */
+function disco(p: Palette): string {
+  const total = p.weights.reduce((a, b) => a + b, 0);
+  let acc = 0;
+  const cunas = p.colors.map((c, i) => {
+    const desde = (acc / total) * 360;
+    acc += p.weights[i]!;
+    return `${rgbCss(c)} ${desde.toFixed(2)}deg ${((acc / total) * 360).toFixed(2)}deg`;
+  });
+  return `conic-gradient(from -90deg, ${cunas.join(', ')})`;
+}
+
+const INICIAL = PALETTES[0]!;
 ---
 
-<div id="dock" role="toolbar" aria-label="Piezas">
+<div id="dock" role="toolbar" aria-label="Piezas y color">
   <div id="dock-fichas">
     {
       PIEZAS.map(({ kind, label }) => (
@@ -42,6 +63,37 @@ const PIEZAS = [
             )}
           </svg>
         </button>
+      ))
+    }
+  </div>
+
+  {/* El separador y el boton de color van fuera de #dock-fichas: no se
+      arrastran, y el tope de piezas no debe apagarlos. */}
+  <div id="dock-sep" aria-hidden="true"></div>
+
+  <button
+    type="button"
+    id="dock-color"
+    title="Color de la arena"
+    aria-label="Color de la arena"
+    aria-expanded="false"
+    aria-controls="dock-paletas"
+  >
+    <span id="dock-color-disco" style={`background:${disco(INICIAL)}`}></span>
+  </button>
+
+  <div id="dock-paletas" role="group" aria-label="Paletas">
+    {
+      PALETTES.map((p) => (
+        <button
+          type="button"
+          class="muestra"
+          aria-pressed={p.id === INICIAL.id}
+          data-palette={p.id}
+          title={p.name}
+          aria-label={p.name}
+          style={`background:${disco(p)}`}
+        />
       ))
     }
   </div>
@@ -129,6 +181,99 @@ const PIEZAS = [
     cursor: not-allowed;
   }
 
+  /* --- Color de la arena --------------------------------------------------- */
+
+  #dock-sep {
+    width: 1px;
+    height: 24px;
+    margin: 0 6px;
+    background: #2a2a31;
+  }
+
+  #dock-color {
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    cursor: pointer;
+    touch-action: none;
+    -webkit-tap-highlight-color: transparent;
+    transition: background-color 160ms ease;
+  }
+
+  #dock-color:hover,
+  #dock-color:focus-visible,
+  #dock-color[aria-expanded='true'] {
+    background: rgba(255, 255, 255, 0.06);
+    outline: none;
+  }
+
+  /* El disco lleva el mismo filete de un pixel que todo lo demas: sin el, sobre
+     el fondo translucido del dock la muestra flota sin borde. */
+  #dock-color-disco,
+  .muestra {
+    border-radius: 999px;
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35), 0 0 0 1px #2a2a31;
+  }
+
+  #dock-color-disco {
+    width: 22px;
+    height: 22px;
+  }
+
+  #dock-color:hover #dock-color-disco,
+  #dock-color[aria-expanded='true'] #dock-color-disco {
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35), 0 0 0 1px #6a6a77;
+  }
+
+  /* Encima del dock y anclado a el: #dock tiene `transform`, asi que es el
+     bloque contenedor de sus hijos absolutos aunque este el mismo desplazado. */
+  #dock-paletas {
+    position: absolute;
+    bottom: calc(100% + 10px);
+    left: 50%;
+    transform: translateX(-50%);
+    display: none;
+    gap: 5px;
+    padding: 7px;
+    border-radius: 999px;
+    outline: 1px solid #2a2a31;
+    background: rgba(15, 15, 17, 0.72);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+
+  #dock.paleta #dock-paletas {
+    display: flex;
+  }
+
+  .muestra {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 0;
+    cursor: pointer;
+    touch-action: none;
+    -webkit-tap-highlight-color: transparent;
+    transition: transform 140ms ease, box-shadow 140ms ease;
+  }
+
+  .muestra:hover,
+  .muestra:focus-visible {
+    outline: none;
+    transform: scale(1.12);
+  }
+
+  /* La elegida se separa por un aro, no por tamano: agrandarla movia a las
+     vecinas de sitio cada vez que se cambiaba de paleta. */
+  .muestra[aria-pressed='true'] {
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35), 0 0 0 2px #d6d6e0;
+  }
+
   /* --- Papelera ---------------------------------------------------------- */
 
   #dock-papelera {
@@ -162,7 +307,10 @@ const PIEZAS = [
     transition: opacity 120ms ease;
   }
 
-  #dock.papelera #dock-fichas {
+  #dock.papelera #dock-fichas,
+  #dock.papelera #dock-sep,
+  #dock.papelera #dock-color,
+  #dock.papelera #dock-paletas {
     display: none;
   }
 
@@ -172,7 +320,9 @@ const PIEZAS = [
 
   @media (prefers-reduced-motion: reduce) {
     #dock,
-    .ficha {
+    .ficha,
+    #dock-color,
+    .muestra {
       transition: none;
     }
   }

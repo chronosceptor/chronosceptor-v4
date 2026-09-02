@@ -7,10 +7,19 @@ versionado según [SemVer](https://semver.org/lang/es/).
 
 ### Added
 
+- **Selector de color en el dock: ocho paletas y la elegida se recuerda.** Un botón en el extremo,
+  separado de las fichas, con la paleta actual pintada como disco de cuatro cuñas; al tocarlo
+  despliega la fila de muestras encima del dock. Las paletas están escritas a mano y no sacadas de
+  un generador: el fondo es `#0B0B0C` y por debajo de ~0,45 de luminancia un grano deja de leerse
+  como arena, que es donde cae la mitad de los colores de cualquier paleta «trending» —pensadas
+  todas sobre blanco—. Las ocho van de 0,49 a 0,96 y están ordenadas por tono, para que la fila se
+  lea como una rueda. Las cuñas del disco van del tamaño de su peso (`3, 3, 2, 1`): a cuartos
+  iguales la muestra mentiría, porque el cuarto color apenas aparece en la arena. La elección se
+  guarda en `localStorage`.
 - **Fondo de la escena: una ilustración, con velo y rayas de pantalla.** Van en la pila de fondo de
-  `#escena`, por debajo de los dos canvas. Es deliberado: el color de la arena sale de la portada y
-  cualquier capa por encima lo apaga — unas rayas sobre el canvas volvían el amarillo un verde
-  sucio. Así la arena es lo único nítido y saturado del cuadro.
+  `#escena`, por debajo de los dos canvas. Es deliberado: el color de la arena es lo único saturado
+  del cuadro y cualquier capa por encima lo apaga — unas rayas sobre el canvas volvían el amarillo
+  un verde sucio. Así la arena es lo único nítido de todo el cuadro.
 - **La fuente se pinta con un dibujo, y se coge por toda la tolva.** El área de agarre, el aro de
   señalado y la posición de la × salen ahora de una caja (`nozzleBox`) y no de un radio: es la única
   pieza que se dibuja casi entera *por encima* de su centro, así que un círculo centrado en la boca
@@ -22,11 +31,18 @@ versionado según [SemVer](https://semver.org/lang/es/).
 - **Los dibujos de las piezas se cargan sobre su trazo vectorial, que sigue ahí** (`sprites.ts`).
   La imagen tarda varios frames en llegar por red, y sin el vectorial debajo la pieza recién soltada
   no está durante un instante — se lee como que el gesto no ha funcionado y se suelta otra. Vale
-  igual si el PNG falta o da 404: como `public/piezas/*.png` no se versiona, un clon limpio
-  funciona entero y se ve con las piezas dibujadas a trazo.
+  igual si el PNG falta o da 404, así que el trazo es red de seguridad y no plan B temporal.
+- **`public/piezas/*.png` sí entra al repo**, como excepción al `*.png` del `.gitignore`. Sin eso,
+  producción salía con las piezas a trazo vectorial mientras en local se veían dibujadas: el
+  respaldo funcionaba tan bien que el fallo no parecía un fallo.
 
 ### Changed
 
+- **`setPalette` entra en el mismo fotograma; se ha quitado el `SHIFT_PAUSE` de 1,2 s.** Esa pausa
+  paraba la siembra para que el cambio de canción se leyera como un corte ajeno; elegido a mano es
+  latencia pura — se toca un color y no cae hasta pasado más de un segundo. La estratificación no
+  dependía de la pausa sino del color que cada grano lleva ya resuelto, así que sigue igual: se ve
+  el estrato nuevo sepultando al anterior con la frontera limpia.
 - **La capa de arena se pinta con alfa y el hueco vacío queda transparente**, para que se vea el
   fondo de la escena por debajo.
 - **La bola se dibuja en vez de traerse en un PNG**: cuerpo con degradado, sombreado, reflejo fijo y
@@ -44,6 +60,13 @@ versionado según [SemVer](https://semver.org/lang/es/).
 
 ### Removed
 
+- **El enlace con Last.fm, entero.** Se van `/api/now-playing` y `/api/art` con sus gemelos en PHP,
+  el poller `lib/nowPlaying.ts`, el median-cut de `sand/color/extract.ts`, las variables
+  `LASTFM_API_KEY` / `LASTFM_USER` del esquema de `astro:env`, el `.env.example` y el parámetro
+  `?mock=1`. Funcionaba y era la idea que definía la página, pero el color era de quien la publicaba
+  y no de quien la mira: el visitante veía lo que a otro le apetecía escuchar y no tenía manera de
+  tocarlo. El build queda **enteramente estático**, sin una sola función ni variable de entorno.
+  Está todo en el historial por si algún día se quiere recuperar el enlace.
 - **El giro de la bola, que llegó a estar entero y medido.** Rapidez angular constante en vuelo,
   todo el giro naciendo en los contactos y rodadura sin patinar al tocar — con lo que un golpe de
   frente le paraba el giro y un roce de refilón era el que más se lo aceleraba. Se quitó porque
