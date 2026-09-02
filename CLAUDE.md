@@ -14,6 +14,9 @@ La justificación de fondo de cada decisión de física está en el README, secc
 - `npx astro dev` queda **corriendo en segundo plano** entre invocaciones. `astro dev stop`
   para matarlo, `astro dev logs` para leerlo.
 - No hay PHP instalado: `php/*.php` nunca se ha ejecutado ni pasado `php -l`.
+- **`*.png` está en `.gitignore`.** Los dibujos de `public/piezas/` no se versionan: un clon
+  limpio funciona —cada pieza cae a su trazo vectorial— pero se ve sin ellos. El fondo va por
+  CSS y ahí no hay fallback; `background.webp` sí entra porque webp no está ignorado.
 
 ## Gotchas que ya costaron tiempo
 
@@ -77,6 +80,11 @@ La justificación de fondo de cada decisión de física está en el README, secc
 - **La fuente de serie ya no es indestructible: se vuela, se tira y `clear()` la repone.** Un lienzo
   sin ninguna fuente es un estado válido y no cae arena; si al medir no crece `sand`, mira primero
   si hay fuente antes de sospechar de la física.
+- **Arrastrar la fuente muta su origen, y `clear()` la repone donde la dejaste, no en el centro.**
+  `onMoved()` escribe en `source.x/y`, que es de donde `Emitter.main` la vuelve a crear. Invalidó
+  dos medidas seguidas: un barrido de sondas que agarra la pieza la va arrastrando, y yo seguía
+  calculando los puntos desde el centro original. Si sondeas agarres, lee `donde` **antes de cada
+  sonda** y calcula relativo a eso, o recarga la página entre una y otra.
 - **El tamaño de la bola sale del ancho del lienzo, no de un número de celdas** (10 celdas de radio
   en escritorio, 5 en vertical). Un número absoluto medido en un perfil no vale en el otro.
 - **`inspect().perdidos` es acumulado de toda la sesión y `clear()` no lo reinicia.** Vale para ver
@@ -88,12 +96,42 @@ La justificación de fondo de cada decisión de física está en el README, secc
   que comparar la ganancia con y sin la pieza en la misma ventana, nunca mirar `sand` a
   secas: la fuente y el drenaje enmascaran la fuga. `inspect().perdidos` no debe subir mientras
   la pieza está puesta.
-- **La tolva de una fuente se pinta por encima de su fila de siembra** (`NOZZLE_H`, en
-  `world.ts`). Una fuente colocada más arriba que eso se queda con la tolva recortada por el borde
-  superior; por eso la de serie no vive en la fila 0.
+- **La tolva de una fuente se pinta por encima de su fila de siembra**, y desde que es un dibujo
+  eso lo manda `NOZZLE_SPRITE_ROWS` (41 filas), no `NOZZLE_H` (14, que es solo el alto del trazo
+  vectorial). Por eso la de serie vive en la fila 44 y no en la 17. Si el dibujo no cabe por encima,
+  `drawNozzle` no lo pinta y cae al trazo — una fuente que aparece como líneas en vez de como
+  ilustración está demasiado arriba, no rota.
+- **El tamaño de la fuente lo manda su caño, no su boca** (`SPOUT_FRAC`, en `render.ts`: cuánto mide
+  el caño del PNG en fracción de su ancho). La pieza se escala hasta que el caño mide lo que mide el
+  chorro, así que **un caño fino no sale fino, sale enorme**: con el 12% del primer dibujo pedía
+  275 px de pieza, un cuarto del lienzo. Al cambiar el PNG hay que volver a medirlo con
+  `python3 scripts/asset-alfa.py --perfil dibujo.png` y llevar el número al código.
+- **El dibujo de la fuente baja `SOLAPE` celdas por debajo de la fila de siembra**, a propósito. La
+  capa vectorial va encima de la arena, así que ese trozo de caño tapa las filas donde nacen los
+  granos; sin él se ve el punto exacto en que aparecen y la arena no sale *de* la pieza, sale
+  *debajo* de la pieza.
+- **La fuente se agarra por una caja (`grabBox`), no por un radio.** Es la única pieza cuyo centro
+  no es el centro de su dibujo —su `cy` es la boca por la que cae la arena, y la tolva está entera
+  por encima—, así que un círculo centrado ahí dejaba fuera todo el dibujo: se cogía por 24 px
+  alrededor del caño. El aro de señalado y la × de quitar salen de la misma caja; si añades otra
+  pieza descentrada, hazlo igual o las tres cosas dejarán de coincidir.
 - **El dock tiene tres piezas: fuente, bola y bomba.** Hubo una cruz giratoria y una plataforma, y
   se quitaron enteras aunque funcionaban (commit `b52c517`, con lo último que llegaron a hacer:
   colocación en dos tiempos y trayecto inclinado). No las reintroduzcas por tu cuenta.
+- **Para comprobar tipos sin disparar el HMR: `npx tsc --noEmit -p tsconfig.json`.** `astro check`
+  regenera `.astro/types.d.ts` y eso recarga la página (ver arriba); `tsc` a secas no toca nada.
+- **Editar un archivo mientras se mide deja módulos a medias en el servidor.** Sale un
+  `ReferenceError: X is not defined` sobre un símbolo que sí existe en el disco, y parece un bug
+  del código: es HMR sirviendo una versión anterior. Se cura recargando la página, no editando.
+- **La bola no gira ni lleva marca en la superficie.** El giro se montó entero, medido y correcto,
+  y se quitó junto con las cinco texturas que se probaron para enseñarlo. El porqué está en el
+  README. No lo reintroduzcas por tu cuenta.
+- **El fondo blanco de un asset generado no se quita por color.** Las piezas van tramadas en
+  semitono —puntos negros sobre blanco— y un borrado por color se lleva también el blanco de entre
+  los puntos, que está *dentro* de la pieza, y la deja agujereada. `scripts/asset-alfa.py` saca el
+  alfa de la región exterior por inundación desde las cuatro esquinas (cuatro, porque la figura
+  suele tocar el borde y parte el exterior en trozos) y respeta el alfa que ya venga hecho. Los
+  prompts y el flujo entero están en `docs/prompts-piezas.md`.
 
 ## Depuración
 
@@ -115,6 +153,14 @@ Todo desde la consola del navegador, sobre `window.fabrica`:
   una pieza, arrastrarla y soltarla se prueban con `fx.dispatchEvent(new PointerEvent(...))` y
   `{clientX, clientY, pointerId: 1, buttons: 1}`. Entre paso y paso hay que dejar correr dos
   `requestAnimationFrame`: el estado del señalado (la × de quitar) lo fija el pintado, no el evento.
+- **El MCP de Playwright deja el perfil bloqueado entre llamadas** («Browser is already in use»).
+  `pkill -f mcp-chrome-<id>` y volver a navegar. Pasó tres veces en una sola sesión.
+- **Para saber si un punto agarra una pieza, mira si la pieza se movió** — nunca si apareció pared.
+  Cerca del borde superior no se puede dibujar, así que «no hay pared nueva» sale igual cuando el
+  gesto agarró que cuando no llegó a hacer nada, y da un mapa del área activa que es pura ficción.
+- **Para juzgar cómo se ve una pieza, recórtala del `#fx` ampliada**: `s = fx.width / grid.w` son
+  px de canvas por celda, con el dpr ya dentro. A tamaño real una pieza mide unos 60 px y ahí se
+  pierde casi todo el detalle — mirarla ampliada es lo que evita decidir sobre lo que no se ve.
 
 Parámetros de URL: `?debug=1` (overlay), `?mock=1` (canción fija, sin API key),
 `?fill=0.2` (baja el nivel de disparo del drenaje; sin esto, probar la descarga son varios

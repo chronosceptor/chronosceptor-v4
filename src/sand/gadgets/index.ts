@@ -91,6 +91,17 @@ export interface Gadget {
   /** Radio de agarre, en celdas. Manda en el hit-test y en el fantasma. */
   readonly radius: number;
   /**
+   * Caja de agarre, en celdas relativas al centro. Si la hay, manda sobre
+   * `radius` en el hit-test.
+   *
+   * La necesita la fuente y solo la fuente: es la unica pieza que no se dibuja
+   * alrededor de su centro sino casi entera por encima de el —su centro es la
+   * boca por la que cae la arena—, asi que un circulo centrado ahi deja fuera
+   * toda la tolva. Las demas son redondas y centradas, y para esas el radio es
+   * mas simple y da lo mismo.
+   */
+  readonly grabBox?: { half: number; up: number; down: number };
+  /**
    * Sitio que ocupa de verdad, en celdas. Por defecto, el radio de agarre.
    *
    * Son dos cosas distintas y conviene no confundirlas. La bola infla su radio
@@ -260,6 +271,11 @@ export class GadgetLayer {
       const g = this.items[i]!;
       const dx = x - g.cx;
       const dy = y - g.cy;
+      const caja = g.grabBox;
+      if (caja) {
+        if (Math.abs(dx) <= caja.half && dy <= caja.down && -dy <= caja.up) return g;
+        continue;
+      }
       if (dx * dx + dy * dy <= g.radius * g.radius) return g;
     }
     return null;

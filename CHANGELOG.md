@@ -7,11 +7,45 @@ versionado según [SemVer](https://semver.org/lang/es/).
 
 ### Added
 
+- **Fondo de la escena: una ilustración, con velo y rayas de pantalla.** Van en la pila de fondo de
+  `#escena`, por debajo de los dos canvas. Es deliberado: el color de la arena sale de la portada y
+  cualquier capa por encima lo apaga — unas rayas sobre el canvas volvían el amarillo un verde
+  sucio. Así la arena es lo único nítido y saturado del cuadro.
+- **La fuente se pinta con un dibujo, y se coge por toda la tolva.** El área de agarre, el aro de
+  señalado y la posición de la × salen ahora de una caja (`nozzleBox`) y no de un radio: es la única
+  pieza que se dibuja casi entera *por encima* de su centro, así que un círculo centrado en la boca
+  dejaba fuera la tolva entera y solo se podía coger por un trocito del caño.
+- **`scripts/asset-alfa.py`**, que mide el perfil de alfa de un dibujo. De ahí sale `SPOUT_FRAC`, la
+  fracción que ocupa el caño y que decide la escala de la pieza entera.
+- **`docs/prompts-piezas.md`**: los prompts de las tres piezas del dock, con el bloque de estilo
+  repetido a propósito en los tres para que salgan como una familia.
+
 ### Changed
+
+- **La capa de arena se pinta con alfa y el hueco vacío queda transparente**, para que se vea el
+  fondo de la escena por debajo.
+- **La bola se dibuja en vez de traerse en un PNG**: cuerpo con degradado, sombreado, reflejo fijo y
+  filete. A los 60 px a los que se pinta de verdad, una foto de esfera pierde el semitono en el
+  remuestreo y deja el borde blando; y sobre todo trae la luz pintada dentro, cuando la luz es de la
+  escena y no de la pieza.
+- **El dibujo de la fuente baja tres celdas por debajo de su fila de siembra** (`SOLAPE`). Sin ese
+  solape se veía el punto exacto en el que aparece cada grano: la arena salía *debajo* de la pieza
+  en vez de *de* la pieza.
+- **La fuente reserva 41 filas por encima de su boca** (`NOZZLE_SPRITE_ROWS`) y no las 17 del trazo:
+  el dibujo es casi cuadrado y se escala por su caño, así que ocupa casi el triple. Con las de antes
+  la tolva salía recortada por arriba y solo asomaba la punta.
 
 ### Fixed
 
 ### Removed
+
+- **El giro de la bola, que llegó a estar entero y medido.** Rapidez angular constante en vuelo,
+  todo el giro naciendo en los contactos y rodadura sin patinar al tocar — con lo que un golpe de
+  frente le paraba el giro y un roce de refilón era el que más se lo aceleraba. Se quitó porque
+  sobre una esfera pulida no hay nada que lo enseñe: de las cinco texturas probadas, dos aros
+  cruzados se leían como el símbolo del átomo, la lente como una hoja, la banda recta como una
+  pegatina, los hoyuelos metían ruido puro a ese tamaño y la veta difusa era invisible. Cruzando la
+  pantalla en un segundo, lo único que da tiempo a leer es la silueta y el reflejo.
 
 ### Security
 

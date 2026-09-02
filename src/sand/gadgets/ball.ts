@@ -1,6 +1,7 @@
 import type { Grid } from '../grid';
 import { SAND, WALL } from '../materials';
-import { THEME, rgbCss } from '../palette';
+import type { Rgb } from '../palette';
+import { THEME } from '../palette';
 import type { DrawCtx } from '../render';
 import { RESERVED_ROWS } from '../world';
 import { Wick } from './blast';
@@ -72,6 +73,15 @@ const BITE_FRAC = 0.4;
  */
 const BITE_P = 1;
 
+/**
+ * De donde viene la luz, en fracciones del radio desde el centro de la bola.
+ *
+ * Arriba y a la izquierda, que es de donde viene en todo lo demas de la escena.
+ * Lo importante no es el sitio: es que sea del mundo y no de la bola. Ver
+ * `drawSphere`.
+ */
+const LIGHT_X = -0.38;
+const LIGHT_Y = -0.44;
 /**
  * Bola que rebota y se come la arena que toca.
  *
@@ -244,6 +254,7 @@ export class Ball implements Gadget {
     }
   }
 
+
   /**
    * Rebote contra el dibujo del usuario, y mordisco en el punto del golpe.
    *
@@ -393,19 +404,7 @@ export class Ball implements Gadget {
       return;
     }
 
-    ctx.save();
-    // Del mismo material que las paredes que dibuja el usuario: relleno con el
-    // color de la masa y filete con el de la linea, que es exactamente como se
-    // ve un trazo suyo. En negro sobre el fondo negro seria invisible.
-    ctx.fillStyle = rgbCss(THEME.structure);
-    ctx.strokeStyle = THEME.structureLine;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.arc(cx, cy, this.r * s, 0, TAU);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.restore();
+    drawSphere(ctx, cx, cy, this.r * s);
 
     // Lo mismo que lleva la bomba encendida, y a proposito: el aro tenue del
     // alcance y el arco de mecha que se vacia. Una bola encendida es una bomba,
@@ -413,6 +412,82 @@ export class Ball implements Gadget {
     // todo esta, que ademas lo lleva paseando por el lienzo.
     this.wick.drawFuse(d, this.cx, this.cy, this.r);
   }
+}
+
+/** El color de la masa, aclarado u oscurecido, en CSS. */
+function tono([r, g, b]: Rgb, k: number): string {
+  const c = (n: number) => Math.max(0, Math.min(255, Math.round(n * k)));
+  return `rgb(${c(r)},${c(g)},${c(b)})`;
+}
+
+/**
+ * La bola, dibujada aqui en vez de traida en un PNG.
+ *
+ * Hubo una foto de una esfera y se descarto. A los 60 px a los que se pinta de
+ * verdad no quedaba nada de ella: el semitono desaparecia en el remuestreo, el
+ * borde salia blando —y todo lo demas en esta escena tiene el canto duro— y el
+ * peso de la imagen se gastaba en un degradado que aqui sale de cuatro lineas y
+ * es nitido a cualquier tamano y en cualquier pantalla.
+ *
+ * Y no tiene marca ninguna en la superficie, que es deliberado: cruza la
+ * pantalla en un segundo, asi que lo unico que da tiempo a leer es la silueta y
+ * el reflejo. Todo lo que se probo para marcarla —y el giro que hacia falta para
+ * moverla— esta contado en el README; el resumen es que o se leia como un
+ * simbolo o no se veia. Lisa no tiene ese problema.
+ */
+function drawSphere(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  R: number,
+): void {
+  const lx = LIGHT_X * R;
+  const ly = LIGHT_Y * R;
+  // Desde el foco de luz hasta el borde opuesto: donde tienen que acabar los
+  // degradados para que el ultimo tono caiga justo en la silueta.
+  const lejos = R + Math.hypot(lx, ly);
+
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.beginPath();
+  ctx.arc(0, 0, R, 0, TAU);
+
+  ctx.save();
+  ctx.clip();
+
+  // Cuerpo: la masa de siempre, con el volumen puesto por la luz.
+  const cuerpo = ctx.createRadialGradient(lx, ly, R * 0.05, lx, ly, lejos);
+  cuerpo.addColorStop(0, tono(THEME.structure, 2.1));
+  cuerpo.addColorStop(0.4, tono(THEME.structure, 1.1));
+  cuerpo.addColorStop(1, tono(THEME.structure, 0.3));
+  ctx.fillStyle = cuerpo;
+  ctx.fillRect(-R, -R, R * 2, R * 2);
+
+  // Sombreado: sin el, el cuerpo solo tiene el degradado y el lado oscuro no
+  // termina de cerrar contra la silueta.
+  const sombra = ctx.createRadialGradient(lx, ly, R * 0.3, lx, ly, lejos);
+  sombra.addColorStop(0, 'rgba(0,0,0,0)');
+  sombra.addColorStop(1, 'rgba(0,0,0,0.7)');
+  ctx.fillStyle = sombra;
+  ctx.fillRect(-R, -R, R * 2, R * 2);
+
+  // Reflejo. Va el ultimo, encima de todo lo demas.
+  const brillo = ctx.createRadialGradient(lx, ly, 0, lx, ly, R * 0.5);
+  brillo.addColorStop(0, 'rgba(255,255,255,0.38)');
+  brillo.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = brillo;
+  ctx.fillRect(-R, -R, R * 2, R * 2);
+
+  ctx.restore();
+
+  // Filete: el mismo canto duro que tiene un trazo del usuario. Sin el, la bola
+  // se funde con el fondo por su lado oscuro.
+  ctx.strokeStyle = THEME.structureLine;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.arc(0, 0, R, 0, TAU);
+  ctx.stroke();
+  ctx.restore();
 }
 
 /**

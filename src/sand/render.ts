@@ -1,7 +1,37 @@
 import type { Grid } from './grid';
 import { EMPTY, IS_MASS, MATERIAL_COUNT, SAND } from './materials';
 import { THEME, packColor } from './palette';
+import { sprite } from './sprites';
 import { NOZZLE_H } from './world';
+
+/**
+ * Cuanto mide el cano del PNG de la fuente, en fraccion de su ancho total.
+ *
+ * Es una propiedad del dibujo y hay que volver a medirla si se regenera:
+ * `python3 scripts/asset-alfa.py --perfil dibujo.png` la saca.
+ *
+ * La escala del dibujo la manda el cano y no la boca porque lo que se ve salir
+ * es el chorro: un cano mas estrecho que su propio chorro es la misma mentira
+ * que un aro que no para nada. Por eso este numero decide el tamano de la
+ * pieza entera, y con un cano fino la tolva se va a un tamano absurdo — el
+ * primer dibujo tenia un 12% y pedia 275 px de ancho.
+ */
+const SPOUT_FRAC = 0.3;
+
+/**
+ * Celdas que el dibujo de la fuente baja por debajo de su fila de siembra.
+ *
+ * La fuente siembra en las dos primeras filas libres bajo la boca, y sin este
+ * solape se ve el punto exacto en el que cada grano aparece de la nada: la
+ * arena no sale de la pieza, sale debajo de la pieza, con una costura entre las
+ * dos. Con el cano tapando esas filas —la capa vectorial va por encima de la
+ * arena— los granos asoman ya cayendo.
+ *
+ * Tres celdas es lo justo para cubrir la siembra y un poco de la caida. Mas
+ * empieza a tragarse chorro visible y la pieza parece flotar sobre el.
+ */
+const SOLAPE = 3;
+
 
 /** Contexto de la capa vectorial: `s` son pixeles CSS por celda. */
 export interface DrawCtx {
@@ -16,18 +46,39 @@ export interface DrawCtx {
  * y las fuentes que el usuario coloca: son la misma cosa y tienen que verse
  * igual, no parecerse.
  *
- * Lo importante es donde va respecto a la fila que siembra: **entera por
- * encima**, y con la garganta justo en esa fila. Antes se pintaba al reves —el
- * embudo se abria hacia arriba con la boca ancha en la fila de siembra— y
- * entonces los granos aparecian dentro del embudo, en su parte ancha, como
- * salidos de la nada; ahora se ve caer el chorro por la garganta, que es de
- * donde sale.
+ * Lo importante es donde va respecto a la fila que siembra: el cuerpo por
+ * encima y la garganta en esa fila. Antes se pintaba al reves —el embudo se
+ * abria hacia arriba con la boca ancha en la fila de siembra— y entonces los
+ * granos aparecian dentro del embudo, en su parte ancha, como salidos de la
+ * nada; ahora se ve caer el chorro por la garganta, que es de donde sale.
+ *
+ * El dibujo ademas baja unas celdas por debajo de esa fila, ver `SOLAPE`: es lo
+ * que hace que la arena salga *de* la pieza y no *debajo* de la pieza.
  *
  * `half` es el semiancho real de la siembra, y por eso se pasa en vez de
  * elegirlo aqui: la garganta dibujada tiene que medir lo que mide el chorro. Un
  * cano estrecho sobre un chorro ancho es la misma mentira que un aro que no
  * para nada.
  */
+/**
+ * Lo que ocupa el dibujo de la tolva, en celdas y relativo a su boca.
+ *
+ * Sirve para que el area de agarre sea lo que se ve y no un circulo pegado a la
+ * boca: la pieza se dibuja casi entera *por encima* de su fila de siembra, asi
+ * que un radio centrado ahi deja fuera toda la tolva y solo se puede coger por
+ * un trocito del cano.
+ *
+ * Va en celdas y no en pixeles porque `s` se cancela: el ancho sale de `half`,
+ * que ya esta en celdas, y de `SPOUT_FRAC`, que es una proporcion.
+ */
+export function nozzleBox(half: number): { half: number; up: number; down: number } {
+  const img = sprite('fuente');
+  if (!img) return { half: (half + 1.5) * 2.6, up: NOZZLE_H, down: 0 };
+  const halfW = (half + 1.5) / SPOUT_FRAC;
+  const alto = halfW * 2 * (img.naturalHeight / img.naturalWidth);
+  return { half: halfW, up: alto - SOLAPE, down: SOLAPE };
+}
+
 export function drawNozzle({ ctx, s }: DrawCtx, x: number, y: number, half: number): void {
   const px = (x + 0.5) * s;
   const boca = y * s;
@@ -39,6 +90,29 @@ export function drawNozzle({ ctx, s }: DrawCtx, x: number, y: number, half: numb
   // Tramo recto de cano antes de la boca. Sin el, las dos paredes se juntan en
   // punta y la salida no se lee como una salida.
   const cano = s * 3;
+
+  const img = sprite('fuente');
+  // Alto que ocupa el dibujo por encima de la fila de siembra. Si no cabe se
+  // pinta el trazo, que ocupa mucho menos.
+  const w = img ? (th * 2) / SPOUT_FRAC : 0;
+  const h = img ? (w * img.naturalHeight) / img.naturalWidth : 0;
+  if (img && h - SOLAPE * s <= boca) {
+    // Se ancla por la boca, no por el centro: lo que tiene que caer en la fila
+    // de siembra es la salida, y el alto lo pone la proporcion del dibujo.
+    // Anclarlo por el centro dejaria el chorro naciendo del aire.
+    //
+    // La escala la manda el cano, no la boca: lo que se ve salir es el chorro,
+    // y un cano mas estrecho que su propio chorro es la misma mentira que un
+    // aro que no para nada. `SPOUT_FRAC` es lo que mide el cano del dibujo en
+    // fraccion de su ancho total, medido sobre el PNG.
+    //
+    // Y baja `SOLAPE` por debajo de la fila de siembra a proposito. La capa
+    // vectorial va encima de la arena, asi que ese trozo de cano tapa las filas
+    // donde nacen los granos: sin el se ve el punto exacto en que aparecen de
+    // la nada y la arena no sale de la pieza, sale debajo de la pieza.
+    ctx.drawImage(img, px - w / 2, boca + SOLAPE * s - h, w, h);
+    return;
+  }
 
   ctx.lineWidth = 1;
   ctx.strokeStyle = THEME.structureSoft;
@@ -93,7 +167,8 @@ export class Renderer {
   ) {
     sandCanvas.width = grid.w;
     sandCanvas.height = grid.h;
-    const sctx = sandCanvas.getContext('2d', { alpha: false });
+    // Con alfa: el hueco vacio queda transparente y se ve el fondo de `#escena`.
+    const sctx = sandCanvas.getContext('2d');
     const fctx = fxCanvas.getContext('2d');
     if (!sctx || !fctx) throw new Error('No hay contexto 2D disponible');
     this.sandCtx = sctx;
@@ -108,7 +183,7 @@ export class Renderer {
     // invisibles en el bitmap y aparecen solo como trazo fino en la capa
     // vectorial. Es lo que evita que la maquinaria se vea como barras gruesas.
     this.matLut = new Uint32Array(MATERIAL_COUNT);
-    const bg = packColor(...THEME.bg);
+    const bg = 0; // transparente: deja pasar el fondo de la escena
     const mass = packColor(...THEME.structure);
     this.matLut.fill(bg);
     for (let m = 0; m < MATERIAL_COUNT; m++) if (IS_MASS[m]) this.matLut[m] = mass;

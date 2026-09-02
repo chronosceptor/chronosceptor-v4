@@ -11,7 +11,16 @@
   #escena {
     position: fixed;
     inset: 0;
-    background: #0b0b0c;
+    /* Velo y rayas van en la pila de fondo, o sea POR DEBAJO de los canvas: la
+       foto queda apagada y con textura de pantalla, y la arena no se toca. Ese
+       es el punto — el color de la arena viene de la portada y cualquier capa
+       por encima lo apaga: unas rayas sobre el canvas volvian el amarillo un
+       verde sucio. Aqui la arena es lo unico nitido y saturado del cuadro. */
+    background:
+      repeating-linear-gradient(rgba(0, 0, 0, .2) 0 1px, transparent 1px 3px),
+      linear-gradient(rgba(11, 11, 12, 0.45), rgba(11, 11, 12, 0.45)),
+      url('/background.webp?v=1') center / cover no-repeat,
+      #0b0b0c;
     overflow: hidden;
   }
 

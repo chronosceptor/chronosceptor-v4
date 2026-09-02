@@ -298,6 +298,24 @@ Cosas que parecen arbitrarias en el código y no lo son:
 - **Y donde no se pueda pulsar, no vale.** La fuente de serie vive en la fila 0 y su × caía por
   encima del borde superior: invisible e imposible de acertar, justo en la pieza de la que más gente
   quiere deshacerse. Si arriba no cabe, se pone debajo.
+- **La bola se dibuja, no es una foto.** Hubo un PNG de una esfera y a los 60 px a los que se pinta
+  de verdad no quedaba nada de él: el semitono desaparecía en el remuestreo y el borde salía blando,
+  cuando todo lo demás en esta escena tiene el canto duro. Dibujada sale de cuatro degradados, es
+  nítida a cualquier tamaño y en cualquier pantalla, y no cuesta ni un byte de red ni el parpadeo de
+  la pieza que aparece tarde. Pero la razón que decide es otra: **una foto de esfera trae la luz
+  pintada dentro**, y la luz es de la escena, no de la pieza.
+- **Y no lleva ninguna marca en la superficie, aunque llegó a llevarla.** Se le montó el giro entero
+  y medido —angular constante en vuelo, todo el giro naciendo en los contactos, rodadura sin patinar
+  al tocar: la rapidez angular igual a la componente tangencial de la velocidad partida por el
+  radio, con lo que un golpe de frente le *para* el giro y un roce de refilón es el que más se lo
+  acelera— y se quitó, porque sobre una esfera pulida no hay nada que lo enseñe. Se probaron dos
+  aros cruzados (se leen como el símbolo del átomo, sin remedio), una franja en forma de lente
+  (acaba en punta contra la silueta y parece una hoja), una banda recta (plana, como una pegatina),
+  unos hoyuelos (los más legibles, pero ruido puro a ese tamaño) y una veta difusa (invisible). Y la
+  foto tampoco puede girar: su brillo gira con ella y pelea con el reflejo fijo, así que la bola
+  parece llevar una lámpara suelta dentro. Cruzando la pantalla en un segundo, lo único que da
+  tiempo a leer es la silueta y el reflejo — que es exactamente lo que queda. Si alguna vez vuelve
+  el giro, tendrá que venir con una textura *plana y sin luz*, nunca con una esfera fotografiada.
 - **A la papelera se le pregunta antes de soltarla.** `isTrash` exige que el dock esté en modo
   papelera y `onRelease` es justo lo que le quita ese modo, así que llamándolo primero la pregunta
   salía siempre que no y tirar una pieza al dock no borraba nada.

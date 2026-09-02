@@ -1,5 +1,5 @@
 import type { Grid } from '../grid';
-import { drawNozzle, type DrawCtx } from '../render';
+import { drawNozzle, nozzleBox, type DrawCtx } from '../render';
 import { mulberry32 } from '../rng';
 import { Source } from '../world';
 import { Wick } from './blast';
@@ -56,6 +56,18 @@ export class Emitter implements Gadget {
   readonly kind = 'emitter';
   readonly radius = GRAB_R;
   dead = false;
+
+  /**
+   * Se coge por toda la tolva, no por el trocito de cano que hay alrededor de
+   * la boca.
+   *
+   * Es un getter y no un campo porque el dibujo carga por red: hasta que llega,
+   * lo que se pinta es el trazo vectorial, que es mucho mas pequeno, y el area
+   * de agarre tiene que ser la de lo que se este viendo en ese momento.
+   */
+  get grabBox(): { half: number; up: number; down: number } {
+    return nozzleBox(this.source.halfWidth);
+  }
 
   readonly permanent: boolean;
 

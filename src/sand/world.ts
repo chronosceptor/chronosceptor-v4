@@ -15,6 +15,19 @@ export const RESERVED_ROWS = 3;
  */
 export const NOZZLE_H = 14;
 
+/**
+ * Filas que hay que dejar libres por encima de la fila de siembra para que
+ * quepa el DIBUJO de la tolva.
+ *
+ * Va aparte de `NOZZLE_H` porque no miden lo mismo: `NOZZLE_H` es el alto del
+ * trazo vectorial, y el dibujo es casi cuadrado y ademas se escala por su cano
+ * —ver `SPOUT_FRAC`—, asi que ocupa casi el triple. Con las 17 filas que daba
+ * `NOZZLE_H` la tolva salia recortada por el borde de arriba y solo asomaba la
+ * punta del cano. Una fuente colocada mas arriba que esto no pinta el dibujo y
+ * cae al trazo, que si cabe.
+ */
+export const NOZZLE_SPRITE_ROWS = 41;
+
 export interface Profile {
   name: 'desktop' | 'portrait';
   /** Pixeles de pantalla por celda. */
@@ -154,9 +167,12 @@ export function createWorld(cssW: number, cssH: number, fillOverride?: number): 
     mulberry32((Date.now() ^ 0x9e3779b9) >>> 0),
     // No en la fila 0: su tolva se pinta por encima de la fila que siembra y
     // ahi arriba no cabria. Un chorro que empieza unas filas mas abajo no se
-    // nota; una fuente sin tolva, si. Las dos filas de mas son aire por encima
+    // nota; una fuente sin tolva, si. Las tres filas de mas son aire por encima
     // de la boca, que pegada al borde parece recortada.
-    NOZZLE_H + 3,
+    //
+    // Lo que manda es el dibujo, no el trazo: `NOZZLE_H` daba 17 y con el PNG
+    // la tolva salia recortada por arriba — solo asomaba la punta del cano.
+    NOZZLE_SPRITE_ROWS + 3,
   );
 
   return { grid, source, drain, profile };

@@ -164,7 +164,17 @@ export function boot(opts: BootOptions): SandApp {
 
   function badgeAt(g: Gadget): Point {
     const d = g.radius + 4;
-    const p = { x: Math.round(g.cx + d * 0.707), y: Math.round(g.cy - d * 0.707) };
+    // Las piezas redondas llevan la × en diagonal, rozando el borde. La fuente
+    // no es redonda ni esta centrada en su dibujo, asi que su × va a la esquina
+    // de la caja de agarre: puesta a `radius` se quedaba pegada a la boca, en
+    // mitad de la tolva, senalando un tamano que no es el de la pieza.
+    const caja = g.grabBox;
+    const p = caja
+      ? {
+          x: Math.round(g.cx + caja.half - BADGE_R),
+          y: Math.round(g.cy - caja.up + BADGE_R),
+        }
+      : { x: Math.round(g.cx + d * 0.707), y: Math.round(g.cy - d * 0.707) };
 
     // Y donde no se pueda pulsar, no vale. La fuente de serie vive en la fila 0
     // y su × caia por encima del borde superior: invisible e imposible de
@@ -456,7 +466,22 @@ export function boot(opts: BootOptions): SandApp {
     ctx.strokeStyle = THEME.ink;
     ctx.setLineDash([2, 4]);
     ctx.beginPath();
-    ctx.arc((g.cx + 0.5) * s, (g.cy + 0.5) * s, (g.radius + 2.5) * s, 0, Math.PI * 2);
+    // El aro tiene que dibujar lo que se puede agarrar. Para la fuente eso es su
+    // caja, no un circulo: es la unica pieza que se pinta casi entera por encima
+    // de su centro, y un aro alrededor del centro le prometia al usuario un
+    // objetivo del tamano de la boca cuando en realidad se coge por toda la
+    // tolva.
+    const caja = g.grabBox;
+    if (caja) {
+      ctx.rect(
+        (g.cx + 0.5 - caja.half) * s,
+        (g.cy + 0.5 - caja.up) * s,
+        caja.half * 2 * s,
+        (caja.up + caja.down) * s,
+      );
+    } else {
+      ctx.arc((g.cx + 0.5) * s, (g.cy + 0.5) * s, (g.radius + 2.5) * s, 0, Math.PI * 2);
+    }
     ctx.stroke();
 
     const b = badge ?? badgeAt(g);
