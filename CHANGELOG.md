@@ -7,6 +7,18 @@ versionado según [SemVer](https://semver.org/lang/es/).
 
 ### Added
 
+### Changed
+
+### Fixed
+
+### Removed
+
+### Security
+
+## [0.4.0] - 2026-09-02
+
+### Added
+
 - **Selector de color en el dock: ocho paletas y la elegida se recuerda.** Un botón en el extremo,
   separado de las fichas, con la paleta actual pintada como disco de cuatro cuñas; al tocarlo
   despliega la fila de muestras encima del dock. Las paletas están escritas a mano y no sacadas de
