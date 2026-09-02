@@ -132,6 +132,11 @@ La justificación de fondo de cada decisión de física está en el README, secc
   alfa de la región exterior por inundación desde las cuatro esquinas (cuatro, porque la figura
   suele tocar el borde y parte el exterior en trozos) y respeta el alfa que ya venga hecho. Los
   prompts y el flujo entero están en `docs/prompts-piezas.md`.
+- **Toda capa decorativa va DEBAJO de los canvas**, en la pila de `background` de `#escena`
+  (`SandCanvas.astro`), nunca superpuesta. El color de la arena sale de la portada del disco y es lo
+  único saturado del cuadro: cualquier velo o trama por encima lo apaga — unas rayas sobre el canvas
+  volvían el amarillo un verde sucio. El velo y el semitono del fondo están puestos así a propósito,
+  y superponerlos es la primera tentación al vestir la escena.
 
 ## Depuración
 
