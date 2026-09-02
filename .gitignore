@@ -9,6 +9,9 @@ dist/
 .playwright-mcp/
 *.png
 !docs/*.png
+# Los dibujos de las piezas si van al repo: sin ellos el build de produccion sale
+# con las piezas a trazo vectorial, que es el respaldo y no lo que se quiere ver.
+!public/piezas/*.png
 
 # cache de los scripts de python
 __pycache__/

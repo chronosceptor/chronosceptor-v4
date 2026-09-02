@@ -14,9 +14,11 @@ La justificación de fondo de cada decisión de física está en el README, secc
 - `npx astro dev` queda **corriendo en segundo plano** entre invocaciones. `astro dev stop`
   para matarlo, `astro dev logs` para leerlo.
 - No hay PHP instalado: `php/*.php` nunca se ha ejecutado ni pasado `php -l`.
-- **`*.png` está en `.gitignore`.** Los dibujos de `public/piezas/` no se versionan: un clon
-  limpio funciona —cada pieza cae a su trazo vectorial— pero se ve sin ellos. El fondo va por
-  CSS y ahí no hay fallback; `background.webp` sí entra porque webp no está ignorado.
+- **`*.png` está en `.gitignore`, con dos excepciones: `docs/` y `public/piezas/`.** Esa segunda
+  hubo que añadirla porque producción salía con la fuente a trazo vectorial mientras en local se
+  veía el dibujo: el respaldo funcionaba tan bien que el fallo no parecía un fallo. Si añades una
+  pieza nueva, comprueba que su PNG entra de verdad — `git check-ignore -v public/piezas/x.png`—,
+  porque un `git status` limpio no distingue «no hay cambios» de «está ignorado».
 
 ## Gotchas que ya costaron tiempo
 
