@@ -9,3 +9,6 @@ dist/
 .playwright-mcp/
 *.png
 !docs/*.png
+
+# cache de los scripts de python
+__pycache__/
