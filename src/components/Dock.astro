@@ -42,13 +42,23 @@ const INICIAL = PALETTES[0]!;
       PIEZAS.map(({ kind, label }) => (
         <button type="button" class="ficha" data-kind={kind} title={label} aria-label={label}>
           <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            {/* Tolva y cano, lo mismo que se pinta en el lienzo: la arena sale
-                por abajo, no aparece dentro del embudo. */}
+            {/* El chorro, que es lo unico que se ve de la fuente: la pieza no se
+                dibuja. Llevaba una tolva con cano y prometia algo que en el
+                lienzo no existe. Nace en un punto y se abre hacia abajo, igual
+                que la arena. */}
             {kind === 'emitter' && (
-              <>
-                <path d="M3.5 4h17M4.6 4l5.6 8.4v2.4M19.4 4l-5.6 8.4v2.4" />
-                <path d="M12 17v1.6M12 20.2v1.5" />
-              </>
+              <g fill="currentColor" stroke="none">
+                <circle cx="12" cy="4.2" r="1.15" />
+                <circle cx="10.1" cy="9" r="1.15" />
+                <circle cx="13.9" cy="9" r="1.15" />
+                <circle cx="8.2" cy="14" r="1.15" />
+                <circle cx="12" cy="14" r="1.15" />
+                <circle cx="15.8" cy="14" r="1.15" />
+                <circle cx="6.3" cy="19" r="1.15" />
+                <circle cx="10.1" cy="19" r="1.15" />
+                <circle cx="13.9" cy="19" r="1.15" />
+                <circle cx="17.7" cy="19" r="1.15" />
+              </g>
             )}
             {/* Un circulo y nada mas. La bola es maciza y no hace mas que rodar:
                 las lineas de movimiento que llevaba prometian un efecto que no

@@ -30,16 +30,24 @@ export type GadgetKind = 'bomb' | 'emitter' | 'ball';
  * es una fraccion de la escena y no un numero de celdas: en celdas fijas
  * ocupaba en un movil cuatro veces la porcion de pantalla que ocupa en un
  * escritorio.
+ *
+ * `k` es la finura del grano (`Profile.k`), y le importa a la fuente por la
+ * razon contraria: lo suyo si esta escrito en celdas.
  */
-export function createGadget(kind: GadgetKind, cx: number, cy: number, gridW?: number): Gadget {
+export function createGadget(
+  kind: GadgetKind,
+  cx: number,
+  cy: number,
+  env?: { gridW?: number; k?: number },
+): Gadget {
   switch (kind) {
     case 'bomb':
       return new Bomb(cx, cy);
     case 'emitter':
-      return new Emitter(cx, cy);
+      return new Emitter(cx, cy, undefined, env?.k);
     case 'ball':
     default:
-      return new Ball(cx, cy, gridW);
+      return new Ball(cx, cy, env?.gridW);
   }
 }
 

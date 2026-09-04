@@ -1,37 +1,7 @@
 import type { Grid } from './grid';
 import { EMPTY, IS_MASS, MATERIAL_COUNT, SAND } from './materials';
 import { THEME, packColor } from './palette';
-import { sprite } from './sprites';
-import { NOZZLE_H } from './world';
-
-/**
- * Cuanto mide el cano del PNG de la fuente, en fraccion de su ancho total.
- *
- * Es una propiedad del dibujo y hay que volver a medirla si se regenera:
- * `python3 scripts/asset-alfa.py --perfil dibujo.png` la saca.
- *
- * La escala del dibujo la manda el cano y no la boca porque lo que se ve salir
- * es el chorro: un cano mas estrecho que su propio chorro es la misma mentira
- * que un aro que no para nada. Por eso este numero decide el tamano de la
- * pieza entera, y con un cano fino la tolva se va a un tamano absurdo — el
- * primer dibujo tenia un 12% y pedia 275 px de ancho.
- */
-const SPOUT_FRAC = 0.28;
-
-/**
- * Celdas que el dibujo de la fuente baja por debajo de su fila de siembra.
- *
- * La fuente siembra en las dos primeras filas libres bajo la boca, y sin este
- * solape se ve el punto exacto en el que cada grano aparece de la nada: la
- * arena no sale de la pieza, sale debajo de la pieza, con una costura entre las
- * dos. Con el cano tapando esas filas —la capa vectorial va por encima de la
- * arena— los granos asoman ya cayendo.
- *
- * Tres celdas es lo justo para cubrir la siembra y un poco de la caida. Mas
- * empieza a tragarse chorro visible y la pieza parece flotar sobre el.
- */
-const SOLAPE = 3;
-
+import { type Source } from './world';
 
 /** Contexto de la capa vectorial: `s` son pixeles CSS por celda. */
 export interface DrawCtx {
@@ -40,101 +10,67 @@ export interface DrawCtx {
 }
 
 /**
- * Lo que ocupa el dibujo de la tolva, en celdas y relativo a su boca.
+ * Filas de aire por encima del vertice que entran en la caja de agarre.
  *
- * Sirve para que el area de agarre sea lo que se ve y no un circulo pegado a la
- * boca: la pieza se dibuja casi entera *por encima* de su fila de siembra, asi
- * que un radio centrado ahi deja fuera toda la tolva y solo se puede coger por
- * un trocito del cano.
- *
- * Va en celdas y no en pixeles porque `s` se cancela: el ancho sale de `half`,
- * que ya esta en celdas, y de `SPOUT_FRAC`, que es una proporcion.
+ * La fuente no se ve, asi que lo unico que hay que poder agarrar es el chorro
+ * — y el chorro empieza en el vertice. Estas filas de mas son para que la x de
+ * quitar caiga por encima de el, sobre fondo y no sobre arena: puesta dentro
+ * del cono se pierde entre los granos justo cuando hay que acertarle.
  */
-export function nozzleBox(half: number): { half: number; up: number; down: number } {
-  const img = sprite('fuente');
-  if (!img) return { half: (half + 1.5) * 2.6, up: NOZZLE_H, down: 0 };
-  const halfW = (half + 1.5) / SPOUT_FRAC;
-  const alto = halfW * 2 * (img.naturalHeight / img.naturalWidth);
-  return { half: halfW, up: alto - SOLAPE, down: SOLAPE };
+const AIRE = 12;
+/** Holgura lateral de la caja de agarre, en celdas. */
+const HOLGURA = 3;
+
+/**
+ * Lo que se puede agarrar de una fuente, en celdas y relativo a su vertice.
+ *
+ * Es la caja del cono, no un circulo: la fuente no se dibuja alrededor de su
+ * centro, es que no se dibuja en absoluto, y lo unico que hay ahi para senalar
+ * es la arena que sale — que cuelga entera por debajo del vertice.
+ *
+ * Antes esta caja la daba el tamano del PNG de la tolva y media unas 39x39
+ * celdas: se comia los gestos de dibujar en toda esa zona. La del cono es
+ * bastante mas pequena, asi que ahora se puede dibujar mucho mas cerca del
+ * chorro.
+ */
+export function jetBox(source: Source): { half: number; up: number; down: number } {
+  return { half: source.halfWidth + HOLGURA, up: AIRE, down: source.spread };
 }
 
 /**
- * Tolva de una fuente de material: cuerpo por encima y garganta en (`x`, `y`).
+ * El contorno del cono por donde va a salir la arena.
  *
- * Vive aqui y no en el renderer porque la comparten la fuente fija de la escena
- * y las fuentes que el usuario coloca: son la misma cosa y tienen que verse
- * igual, no parecerse.
+ * La fuente es invisible en reposo — de eso se trata: la arena aparece de la
+ * nada y se abre. Pero hay dos momentos en los que no puede serlo:
  *
- * Lo importante es donde va respecto a la fila que siembra: el cuerpo por
- * encima y la garganta en esa fila. Antes se pintaba al reves —el embudo se
- * abria hacia arriba con la boca ancha en la fila de siembra— y entonces los
- * granos aparecian dentro del embudo, en su parte ancha, como salidos de la
- * nada; ahora se ve caer el chorro por la garganta, que es de donde sale.
+ *  - Mientras la llevas, incluida la ficha que se arrastra desde el dock. Sin
+ *    esto, colocar una fuente seria a ciegas y moverla tambien.
+ *  - Mientras vuelve de una explosion. Son un par de segundos sin arena, y sin
+ *    ninguna senal de que va a volver el lienzo parece roto.
  *
- * El dibujo ademas baja unas celdas por debajo de esa fila, ver `SOLAPE`: es lo
- * que hace que la arena salga *de* la pieza y no *debajo* de la pieza.
- *
- * `half` es el semiancho real de la siembra, y por eso se pasa en vez de
- * elegirlo aqui: la garganta dibujada tiene que medir lo que mide el chorro. Un
- * cano estrecho sobre un chorro ancho es la misma mentira que un aro que no
- * para nada.
+ * Se traza desde el `halfAt` de la propia fuente y no con una cuenta paralela,
+ * para que lo que se promete sea exactamente por donde va a salir.
  */
-export function drawNozzle({ ctx, s }: DrawCtx, x: number, y: number, half: number): void {
+export function drawJetHint({ ctx, s }: DrawCtx, source: Source, x: number, y: number): void {
   const px = (x + 0.5) * s;
-  const boca = y * s;
-  // Garganta: el ancho de la siembra, con una celda de holgura a cada lado para
-  // que el chorro salga rozando el cano y no pegado a la linea.
-  const th = (half + 1.5) * s;
-  const alto = NOZZLE_H * s;
-  const ancho = th * 2.6;
-  // Tramo recto de cano antes de la boca. Sin el, las dos paredes se juntan en
-  // punta y la salida no se lee como una salida.
-  const cano = s * 3;
-
-  const img = sprite('fuente');
-  // Alto que ocupa el dibujo por encima de la fila de siembra. Si no cabe se
-  // pinta el trazo, que ocupa mucho menos.
-  const w = img ? (th * 2) / SPOUT_FRAC : 0;
-  const h = img ? (w * img.naturalHeight) / img.naturalWidth : 0;
-  if (img && h - SOLAPE * s <= boca) {
-    // Se ancla por la boca, no por el centro: lo que tiene que caer en la fila
-    // de siembra es la salida, y el alto lo pone la proporcion del dibujo.
-    // Anclarlo por el centro dejaria el chorro naciendo del aire.
-    //
-    // La escala la manda el cano, no la boca: lo que se ve salir es el chorro,
-    // y un cano mas estrecho que su propio chorro es la misma mentira que un
-    // aro que no para nada. `SPOUT_FRAC` es lo que mide el cano del dibujo en
-    // fraccion de su ancho total, medido sobre el PNG.
-    //
-    // Y baja `SOLAPE` por debajo de la fila de siembra a proposito. La capa
-    // vectorial va encima de la arena, asi que ese trozo de cano tapa las filas
-    // donde nacen los granos: sin el se ve el punto exacto en que aparecen de
-    // la nada y la arena no sale de la pieza, sale debajo de la pieza.
-    ctx.drawImage(img, px - w / 2, boca + SOLAPE * s - h, w, h);
-    return;
-  }
-
-  ctx.lineWidth = 1;
-  ctx.strokeStyle = THEME.structureSoft;
+  const py = y * s;
+  // El tono claro, y no el de la maquinaria: esta linea no compite con ninguna
+  // pieza dibujada porque no hay pieza dibujada. Es lo unico que se ve.
+  //
+  // Y solida y algo gruesa por la misma razon. En `structureLine`, a un pixel y
+  // a rayas no se veia: son diagonales, asi que el antialias ya reparte cada
+  // linea entre dos pixeles a medio tono, y encima el fantasma va al 55% de
+  // opacidad. Entre las tres cosas quedaba en un gris casi igual al fondo.
+  //
+  // Las rayas las pone quien llama, no esta funcion: el fantasma se pinta a
+  // rayas cuando la pieza NO cabe ahi, y ponerlas aqui borraba esa senal.
+  ctx.strokeStyle = THEME.inkBright;
+  ctx.lineWidth = 1.5;
   ctx.beginPath();
-  // La boca de arriba, cerrada de lado a lado. Sin esa linea las dos paredes
-  // quedan sueltas en el aire y la pieza se lee como un par de alas, no como
-  // una tolva; es lo unico que la hace reconocible de un vistazo.
-  ctx.moveTo(px - ancho, boca - alto);
-  ctx.lineTo(px + ancho, boca - alto);
-  ctx.moveTo(px - ancho, boca - alto);
-  ctx.lineTo(px - th, boca - cano);
-  ctx.moveTo(px + ancho, boca - alto);
-  ctx.lineTo(px + th, boca - cano);
-  ctx.stroke();
-
-  // El cano, un tono mas claro: es la parte que dice por donde sale.
-  ctx.strokeStyle = THEME.structureLine;
-  ctx.beginPath();
-  ctx.moveTo(px - th, boca - cano);
-  ctx.lineTo(px - th, boca);
-  ctx.moveTo(px + th, boca - cano);
-  ctx.lineTo(px + th, boca);
+  const fin = source.spread;
+  ctx.moveTo(px - (source.halfAt(fin) + 0.5) * s, py + fin * s);
+  ctx.lineTo(px, py);
+  ctx.lineTo(px + (source.halfAt(fin) + 0.5) * s, py + fin * s);
   ctx.stroke();
 }
 
@@ -227,7 +163,6 @@ export class Renderer {
     return { ctx, s: this.s };
   }
 
-  /** La fuente, en el centro superior. */
   /**
    * Circulo de la brocha bajo el puntero.
    *

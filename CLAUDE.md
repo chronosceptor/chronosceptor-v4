@@ -14,11 +14,12 @@ La justificación de fondo de cada decisión de física está en el README, secc
   `export PATH="$HOME/.nvm/versions/node/v22.23.1/bin:$PATH"` en cada shell.
 - `npx astro dev` queda **corriendo en segundo plano** entre invocaciones. `astro dev stop`
   para matarlo, `astro dev logs` para leerlo.
-- **`*.png` está en `.gitignore`, con dos excepciones: `docs/` y `public/piezas/`.** Esa segunda
-  hubo que añadirla porque producción salía con la fuente a trazo vectorial mientras en local se
-  veía el dibujo: el respaldo funcionaba tan bien que el fallo no parecía un fallo. Si añades una
-  pieza nueva, comprueba que su PNG entra de verdad — `git check-ignore -v public/piezas/x.png`—,
-  porque un `git status` limpio no distingue «no hay cambios» de «está ignorado».
+- **`*.png` está en `.gitignore`, con una sola excepción: `docs/`.** Ya no hay ningún dibujo de
+  pieza: la bola se dibuja y la fuente no se dibuja en absoluto. Si algún día vuelve a haber uno,
+  hay que volver a añadir su excepción **y comprobar que entra de verdad** —`git check-ignore -v
+  ruta.png`—, porque un `git status` limpio no distingue «no hay cambios» de «está ignorado». Ya
+  pasó: producción salía con la fuente a trazo vectorial mientras en local se veía el dibujo, y el
+  respaldo funcionaba tan bien que el fallo no parecía un fallo.
 
 ## Gotchas que ya costaron tiempo
 
@@ -54,7 +55,16 @@ La justificación de fondo de cada decisión de física está en el README, secc
 - **Para mirar la arena, casi siempre es mejor sacar los píxeles que capturar la pantalla.**
   `browser_evaluate` con el parámetro `filename` guarda lo que devuelvas, así que un
   `canvas.toDataURL()` —recortado y ampliado con `drawImage` sobre un canvas auxiliar— baja a
-  disco y se decodifica con `base64`. No se cuelga nunca y da el recorte ya ampliado.
+  disco. No se cuelga nunca y da el recorte ya ampliado. Dos detalles: el archivo aterriza en la
+  **raíz del repo**, no en `.playwright-mcp/`, y lo que guarda es **JSON**, así que `base64 -d` a
+  secas falla — hay que quitarle las comillas (`json.load`) antes de decodificar. Devolviendo un
+  objeto con varios `toDataURL` se sacan varios recortes de una sola llamada.
+- **Un fotograma suelto del chorro engaña: parece granos sueltos.** A 700 granos/s cada fila del
+  chorro tiene un puñado de granos en un instante dado, y el ojo no ve eso, ve la estela. Para
+  juzgar la forma hay que componer ~24 fotogramas seguidos en un canvas auxiliar con
+  `globalAlpha = 0.5` dentro de un bucle de `requestAnimationFrame`: eso da la envolvente, que es
+  lo que se ve de verdad. Con el fotograma suelto estuve a punto de dar por malo un cono que en
+  pantalla se lee perfectamente.
 - **El navegador del MCP corre a ~5 fps** (`inspect().fps` lo dice). La arena se acumula cinco
   veces más despacio que en pantalla: 349 granos tras 11 s me hizo sospechar del emisor cuando
   no pasaba nada. Mira `fps` antes de interpretar cualquier serie temporal.
@@ -117,25 +127,52 @@ La justificación de fondo de cada decisión de física está en el README, secc
   que comparar la ganancia con y sin la pieza en la misma ventana, nunca mirar `sand` a
   secas: la fuente y el drenaje enmascaran la fuga. `inspect().perdidos` no debe subir mientras
   la pieza está puesta.
-- **La tolva de una fuente se pinta por encima de su fila de siembra**, y desde que es un dibujo
-  eso lo manda `NOZZLE_SPRITE_ROWS` (41 filas), no `NOZZLE_H` (14, que es solo el alto del trazo
-  vectorial). Por eso la de serie vive en la fila 44 y no en la 17. Si el dibujo no cabe por encima,
-  `drawNozzle` no lo pinta y cae al trazo — una fuente que aparece como líneas en vez de como
-  ilustración está demasiado arriba, no rota.
-- **El tamaño de la fuente lo manda su caño, no su boca** (`SPOUT_FRAC`, en `render.ts`: cuánto mide
-  el caño del PNG en fracción de su ancho). La pieza se escala hasta que el caño mide lo que mide el
-  chorro, así que **un caño fino no sale fino, sale enorme**: con el 12% del primer dibujo pedía
-  275 px de pieza, un cuarto del lienzo. Al cambiar el PNG hay que volver a medirlo con
-  `python3 scripts/asset-alfa.py --perfil dibujo.png` y llevar el número al código.
-- **El dibujo de la fuente baja `SOLAPE` celdas por debajo de la fila de siembra**, a propósito. La
-  capa vectorial va encima de la arena, así que ese trozo de caño tapa las filas donde nacen los
-  granos; sin él se ve el punto exacto en que aparecen y la arena no sale *de* la pieza, sale
-  *debajo* de la pieza.
-- **La fuente se agarra por una caja (`grabBox`), no por un radio.** Es la única pieza cuyo centro
-  no es el centro de su dibujo —su `cy` es la boca por la que cae la arena, y la tolva está entera
-  por encima—, así que un círculo centrado ahí dejaba fuera todo el dibujo: se cogía por 24 px
-  alrededor del caño. El aro de señalado y la × de quitar salen de la misma caja; si añades otra
-  pieza descentrada, hazlo igual o las tres cosas dejarán de coincidir.
+- **El grano es de 2 px en escritorio y 3 en vertical, y bajarlo NO es cambiar `cell`.** Todo lo
+  calibrado en celdas encoge en pantalla en la misma proporción, así que bajar `cell` a secas no da
+  una versión fina de esta escena: da otra escena. La regla del reescalado es que **lo que va por
+  longitud sube con la finura y lo que llena área sube con su cuadrado** —brocha, boquilla, boca del
+  drenaje y cono por `k`; caudal y tope de arena por `k²`—. Sin el `k²` del tope, el drenaje deja de
+  dispararse: el disparo es una fracción de las celdas del lienzo, que suben al cuadrado, y el
+  emisor se corta por el tope mucho antes de llegar.
+- **`regrain` (`world.ts`) solo alcanza a la tabla del perfil, no a las constantes en celdas de los
+  demás módulos.** `MAX_VEL`, `CHUTE_STEPS` y `AVALANCHE_STEPS` en `physics`, la gravedad y el tope
+  de la `ejecta`, `BLAST_R`, el cuerpo y el agarre de la bomba, el radio de la bola, `TAP_CELLS`,
+  `BADGE_R`: todas están escritas para el grano de serie y hubo que rehacerlas **a mano** al pasar
+  de 3 a 2. Si vuelves a mover `cell` de verdad, hay que rehacer los dos grupos.
+- **`?cell=N` sirve para juzgar la ARENA, no las piezas.** Reescala el perfil al vuelo para comparar
+  granos en la misma sesión (`?cell=3` es a ojo el grano grueso de antes), pero por lo anterior deja
+  la bola, la explosión y los agarres al tamaño de serie. Una comparación de piezas hecha con
+  `?cell=` no vale.
+- **La fuente no se dibuja, y no es que se le haya olvidado.** No hay tolva, ni PNG, ni trazo: en
+  reposo `Emitter.draw` no pinta nada y lo único que se ve es la arena saliendo. Tuvo un dibujo con
+  `SPOUT_FRAC`, `SOLAPE` y `NOZZLE_SPRITE_ROWS` detrás, y está entero en el historial. No lo
+  reintroduzcas por tu cuenta; el porqué está en el README.
+- **El chorro nace en un vértice de una celda y se abre en `SPREAD_ROWS` filas** (51, en `world.ts`).
+  Cada grano sortea una fila del cono y **baja hasta encontrar hueco**: sin ese descenso el vértice
+  sale punteado —es de una celda, se satura, y lo que no cabe se pierde— y además cae el caudal. Si
+  tocas la siembra, mide las dos cosas: el ancho por fila y los granos/s de verdad.
+- **La forma del cono la manda `Source.halfAt`, y la usan dos sitios.** La siembra y el contorno que
+  se pinta al arrastrar la fuente salen los dos de ahí. Si calculas la forma aparte en el render,
+  acabarás prometiendo un cono por donde la arena no sale.
+- **`SPREAD_ROWS` no es solo estética: es también la altura de la caja de agarre.** Alargar el cono
+  se come sitio de dibujo alrededor del chorro. Se probó con 22 —llega a su ancho en el primer
+  tercio de la caída y el resto baja recto— y con 34, ambas medidas con el grano grueso de
+  entonces; las 51 de ahora son ese mismo cono con el grano fino. Se abre casi todo el rato
+  que se ve, que es lo que se lee como que crece.
+- **La fuente se agarra por una caja (`grabBox`), no por un radio.** Es la única pieza que no tiene
+  cuerpo dibujado y que cuelga entera por debajo de su centro —su `cy` es el vértice del que cae la
+  arena—, así que un círculo centrado ahí prometería un objetivo que no es el que se ve. El aro de
+  señalado y la × de quitar salen de la misma caja; si añades otra pieza descentrada, hazlo igual o
+  las tres cosas dejarán de coincidir.
+- **La pista que se ve al arrastrar una fuente va en `inkBright` y sólida, no en el tono de la
+  maquinaria.** Es diagonal, así que el antialias ya la reparte a medio tono entre dos píxeles, y el
+  fantasma del dock encima va al 55% de opacidad: en `structureLine`, a un píxel y a rayas, quedaba
+  en un gris casi igual al fondo. Y las rayas las pone quien llama —el fantasma se pinta a rayas
+  cuando la pieza **no** cabe—, así que `drawJetHint` no debe tocar el `setLineDash`.
+- **Una pieza colocada desde el dock hay que desmarcarla (`held = false`) en `endPlacement`.** El
+  fantasma nace `held` para que la fuente enseñe su cono mientras lo llevas, y nada más lo apaga: el
+  `held` de una pieza agarrada lo quita el soltarla, y el fantasma no pasa por ahí. Se quedaba con
+  el cono pintado para siempre.
 - **El dock tiene tres piezas: fuente, bola y bomba.** Hubo una cruz giratoria y una plataforma, y
   se quitaron enteras aunque funcionaban (commit `b52c517`, con lo último que llegaron a hacer:
   colocación en dos tiempos y trayecto inclinado). No las reintroduzcas por tu cuenta.
@@ -196,8 +233,9 @@ Todo desde la consola del navegador, sobre `window.fabrica`:
   px de canvas por celda, con el dpr ya dentro. A tamaño real una pieza mide unos 60 px y ahí se
   pierde casi todo el detalle — mirarla ampliada es lo que evita decidir sobre lo que no se ve.
 
-Parámetros de URL: `?debug=1` (overlay) y `?fill=0.2` (baja el nivel de disparo del
-drenaje; sin esto, probar la descarga son varios minutos por ciclo).
+Parámetros de URL: `?debug=1` (overlay), `?fill=0.2` (baja el nivel de disparo del
+drenaje; sin esto, probar la descarga son varios minutos por ciclo) y `?cell=N` (píxeles por
+celda, de 2 a 8: el tamaño del grano, con el perfil reescalado — ver arriba lo que no alcanza).
 
 La paleta elegida vive en `localStorage['chronosceptor:paleta']`. Al medir color, bórralo o
 fíjalo a mano: una sesión anterior deja la página arrancando en un color que no es el de

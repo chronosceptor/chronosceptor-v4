@@ -63,7 +63,17 @@ import Dock from '../components/Dock.astro';
     // `?fill=0.2` dispara el drenaje mucho antes: sirve para probar la descarga
     // sin esperar el ciclo completo.
     fillFrac: params.has('fill') ? Number(params.get('fill')) : undefined,
+    // `?cell=N` cambia el tamano del grano —de serie son 2 px en escritorio y 3
+    // en vertical— y reescala el perfil con el, para poder comparar granos en la
+    // misma sesion sin recompilar: `?cell=3` es a ojo el grano grueso que habia
+    // antes. No alcanza a las constantes en celdas de las piezas, asi que sirve
+    // para juzgar la arena y no la bola ni la explosion. Ver `regrain`.
+    cell: params.has('cell') ? clamp(Number(params.get('cell')), 2, 8) : undefined,
   });
+
+  function clamp(n: number, lo: number, hi: number): number | undefined {
+    return Number.isFinite(n) ? Math.min(hi, Math.max(lo, Math.round(n))) : undefined;
+  }
 
   // Para trastear desde la consola: `fabrica.clear()` vacia el lienzo.
   (window as any).fabrica = app;

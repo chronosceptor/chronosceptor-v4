@@ -7,9 +7,9 @@ import type { Blast, Gadget, TickCtx } from './index';
 
 const TAU = Math.PI * 2;
 /** Cuerpo solido, en celdas: la arena se apoya en ella en vez de atravesarla. */
-const BODY_R = 3;
+const BODY_R = 5;
 /** Radio de agarre. Mas grande que el cuerpo para poder tocarla con el dedo. */
-const GRAB_R = 9;
+const GRAB_R = 14;
 
 /**
  * Bomba de mecha.

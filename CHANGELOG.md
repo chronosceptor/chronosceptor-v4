@@ -7,8 +7,31 @@ versionado según [SemVer](https://semver.org/lang/es/).
 
 ### Added
 
+- **`?cell=N` cambia el tamaño del grano sin recompilar**, para poder comparar granos en la misma
+  sesión. No es solo el tamaño: reescala el perfil entero con él —lo que va por longitud con `k`,
+  lo que llena área con `k²`—, porque bajar `cell` a secas no da una versión fina de la escena, da
+  otra escena. No alcanza a las constantes en celdas de la bola, la explosión o la ejecta, así que
+  sirve para juzgar la arena y no las piezas.
+
 ### Changed
 
+- **La fuente ya no se dibuja: lo único que se ve de ella es la arena saliendo.** Tenía una tolva
+  ilustrada que estaba resolviendo un problema en vez de no tenerlo — el chorro nacía ya con su
+  ancho final, así que había un punto en el que aparecía una línea de nueve celdas de la nada, y el
+  dibujo bajaba tres filas por debajo de la siembra justo para taparlo. Ahora se siembra en cono
+  desde un vértice de una sola celda: no hay costura que tapar, y el punto donde la arena aparece
+  deja de ser el fallo y pasa a ser el efecto. Solo se pinta el contorno del cono en los tres
+  momentos en que hace falta — mientras la llevas, mientras está reventada y mientras vuelve.
+- **La caja de agarre de la fuente es la del cono y no la del dibujo.** Medía unas 39×39 celdas y se
+  comía los gestos de dibujar en toda esa zona; la del cono es bastante más estrecha, así que ahora
+  se puede dibujar cerca del chorro.
+- **Grano más fino: 2 px en escritorio y 3 en vertical**, con toda la tabla de perfiles
+  recalibrada — no multiplicada. Los números están llevados a que en pantalla todo mida lo que
+  medía: lo que va por longitud sube con la finura y lo que llena área con su cuadrado. Con ellos
+  van las constantes en celdas de `physics`, `ejecta`, `ball`, `blast`, `bomb` y `render`, que no
+  salen del perfil.
+- **La ficha de la fuente en el dock es el chorro, no una tolva.** Prometía una pieza que en el
+  lienzo ya no existe.
 - **Otra ilustración de fondo.** Misma ruta (`public/background.webp`) y mismo tratamiento —velo y
   rayas por debajo de los canvas—, imagen distinta. El `?v=` de la `url()` sube a `2`: el archivo
   cambia de contenido sin cambiar de nombre, así que sin bumpearlo el navegador y la CDN siguen
@@ -18,6 +41,10 @@ versionado según [SemVer](https://semver.org/lang/es/).
 ### Fixed
 
 ### Removed
+
+- **El PNG de la fuente, su cargador (`sprites.ts`) y las tres constantes que lo escalaban**
+  (`SPOUT_FRAC`, `SOLAPE`, `NOZZLE_SPRITE_ROWS`). Con ellos se va la excepción
+  `!public/piezas/*.png` del `.gitignore`: ya no hay ningún dibujo de pieza.
 
 ### Security
 

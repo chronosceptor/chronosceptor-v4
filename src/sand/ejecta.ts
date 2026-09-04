@@ -16,18 +16,18 @@ import { SOLID } from './materials';
  */
 
 /** Aceleracion, en celdas/s². */
-const GRAVITY = 420;
+const GRAVITY = 630;
 /**
  * Rapidez maxima, en celdas/s.
  *
- * El automata cae como mucho a MAX_VEL = 3 celdas/frame (180 celdas/s), y el
+ * El automata cae como mucho a MAX_VEL = 5 celdas/frame (300 celdas/s), y el
  * primer valor que se probo aqui rondaba esa cifra para que la arena en vuelo
  * pareciera del mismo material. Con una explosion es al reves: si el tope
  * recorta la energia de la bomba, sube la potencia y no pasa nada en pantalla,
  * porque el limite se la come entera. Una explosion tiene que verse mas rapida
  * que la caida libre; para eso es una explosion.
  */
-const MAX_SPEED = 420;
+const MAX_SPEED = 630;
 
 export class Ejecta {
   /** Posicion en celdas, en coma flotante. */
@@ -219,6 +219,6 @@ export class Ejecta {
  * Solo se recorre en el camino de fallo, que es raro, y aun en el peor caso son
  * unos 170 accesos a un array plano.
  */
-const LAND_SEARCH = 6;
+const LAND_SEARCH = 9;
 /** Celdas que se sube por la columna como ultimo recurso antes de darlo por perdido. */
-const LAND_CLIMB = 60;
+const LAND_CLIMB = 90;

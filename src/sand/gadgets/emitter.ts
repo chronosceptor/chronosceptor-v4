@@ -1,26 +1,27 @@
 import type { Grid } from '../grid';
-import { drawNozzle, nozzleBox, type DrawCtx } from '../render';
+import { drawJetHint, jetBox, type DrawCtx } from '../render';
 import { mulberry32 } from '../rng';
-import { Source } from '../world';
+import { Source, SPREAD_ROWS } from '../world';
 import { Wick } from './blast';
 import type { Blast, Gadget, TickCtx } from './index';
 
 /** Radio de agarre, en celdas. */
-const GRAB_R = 8;
+const GRAB_R = 12;
 /**
- * Caudal, en granos/s. Por debajo de la fuente principal (700 en escritorio):
+ * Caudal, en granos/s. Por debajo de la fuente principal (1.575 en escritorio):
  * es un chorro secundario, y a caudal igual compite con el original.
  */
-const RATE = 500;
+const RATE = 1125;
 /**
  * Semiancho de la boquilla, en celdas. Es el techo real del caudal, no `RATE`.
  *
- * Con 3 se veia el problema que el README ya documenta para la fuente
+ * Con 3 celdas del grano grueso de entonces se veia el problema que el README
+ * ya documenta para la fuente
  * principal: la boquilla solo puede sembrar en sus celdas libres, asi que
  * rechaza lo que no cabe y el chorro sale a guiones en vez de como un hilo. Se
  * pedian 320 granos/s y salian del orden de 180.
  */
-const NOZZLE = 4;
+const NOZZLE = 6;
 /** Segundos entre cambios de color dominante. */
 const COLOR_PERIOD = 26;
 /**
@@ -58,18 +59,18 @@ export class Emitter implements Gadget {
   dead = false;
 
   /**
-   * Se coge por toda la tolva, no por el trocito de cano que hay alrededor de
-   * la boca.
+   * Se coge por el chorro, que es lo unico que hay de ella a la vista.
    *
-   * Es un getter y no un campo porque el dibujo carga por red: hasta que llega,
-   * lo que se pinta es el trazo vectorial, que es mucho mas pequeno, y el area
-   * de agarre tiene que ser la de lo que se este viendo en ese momento.
+   * Cuelga entera por debajo del centro —el centro es el vertice, donde nace el
+   * primer grano—, asi que un circulo centrado ahi prometeria un objetivo que
+   * no es el que se ve.
    */
   get grabBox(): { half: number; up: number; down: number } {
-    return nozzleBox(this.source.halfWidth);
+    return jetBox(this.source);
   }
 
   readonly permanent: boolean;
+  held = false;
 
   private readonly source: Source;
   /** Apagada mientras nada le estalle al lado. Una bomba se la lleva. */
@@ -86,17 +87,26 @@ export class Emitter implements Gadget {
     public cx: number,
     public cy: number,
     adoptada?: Source,
+    /**
+     * Finura del grano (`Profile.k`). Uno salvo con `?cell=N`.
+     *
+     * `NOZZLE` y `RATE` estan escritos en celdas y en granos/s para el grano de
+     * serie: con el grano fino, dejarlos tal cual daria un chorro de la mitad de
+     * ancho y con un caudal que no llena lo que llenaba. Ver `regrain`.
+     */
+    k = 1,
   ) {
     this.permanent = adoptada !== undefined;
     this.source =
       adoptada ??
       new Source(
         cx,
-        NOZZLE,
-        RATE,
+        Math.max(1, Math.round(NOZZLE * k)),
+        Math.round(RATE * k * k),
         COLOR_PERIOD,
         mulberry32((Date.now() ^ (cx * 2654435761)) >>> 0),
         cy,
+        Math.max(1, Math.round(SPREAD_ROWS * k)),
       );
   }
 
@@ -153,24 +163,38 @@ export class Emitter implements Gadget {
     this.source.tick(c.grid, dt, c.palette, c.rand, c.budget);
   }
 
+  /**
+   * En reposo no se pinta nada: la fuente es invisible y lo unico que se ve de
+   * ella es la arena saliendo del vertice y abriendose. De eso se trata.
+   *
+   * Solo hay tres momentos en los que si tiene que verse algo, y ninguno es el
+   * normal: mientras la llevas, mientras esta reventada y mientras vuelve.
+   */
   draw(d: DrawCtx): void {
     if (this.wick.blown) {
       this.wick.drawRing(d, this.cx, this.cy);
       return;
     }
-    // Rehaciendose: la boquilla reaparece atenuada y va cogiendo cuerpo. Es la
-    // unica senal de que el chorro va a volver; sin ella, el rato sin arena se
-    // lee como que la has roto.
+    // Rehaciendose: el contorno del cono entra poco a poco. Es la unica senal de
+    // que el chorro va a volver; sin ella, el rato sin arena se lee como que la
+    // has roto para siempre.
     if (this.dark > 0) {
       const { ctx } = d;
       ctx.save();
       ctx.globalAlpha = 0.12 + 0.88 * (1 - this.dark / REBIRTH);
-      ctx.setLineDash([2, 3]);
-      drawNozzle(d, this.cx, this.cy, this.source.halfWidth);
+      drawJetHint(d, this.source, this.cx, this.cy);
       ctx.restore();
       return;
     }
-    drawNozzle(d, this.cx, this.cy, this.source.halfWidth);
+    // Mientras la llevas —o mientras es el fantasma de una ficha del dock, que
+    // tambien nace `held`— se ensena por donde va a salir la arena. Colocar a
+    // ciegas una pieza que no se ve es colocarla al azar.
+    if (this.held) {
+      const { ctx } = d;
+      ctx.save();
+      drawJetHint(d, this.source, this.cx, this.cy);
+      ctx.restore();
+    }
     this.wick.drawFuse(d, this.cx, this.cy, GRAB_R);
   }
 }

@@ -26,8 +26,8 @@ const TAU = Math.PI * 2;
  * el 41% de lo que suelta la fuente.
  */
 const R_FRAC = 0.025;
-const R_MIN = 5;
-const R_MAX = 11;
+const R_MIN = 8;
+const R_MAX = 17;
 
 /** Radio en celdas para un lienzo de este ancho. */
 export function ballRadius(gridW: number): number {
@@ -41,16 +41,16 @@ export function ballRadius(gridW: number): number {
  * cursor en una decima de segundo, y con un objetivo del tamano justo de la
  * bola no habria manera humana de cogerla para moverla o tirarla.
  */
-const GRAB_EXTRA = 5;
+const GRAB_EXTRA = 8;
 /** Rapidez, en celdas/s. Constante: no hay gravedad ni rozamiento. */
-const SPEED = 145;
+const SPEED = 218;
 /**
  * Celdas que se aparta de una pared en cada paso en que la toca.
  *
  * Hace falta para el caso en que la pared aparece encima de la bola —dibujas
  * justo donde esta— y no basta con rebotar: hay que ir sacandola.
  */
-const PUSH_OUT = 1.5;
+const PUSH_OUT = 2.3;
 /**
  * Radio del mordisco que cada golpe arranca de la pared, como fraccion del
  * radio de la bola.
@@ -143,7 +143,7 @@ export class Ball implements Gadget {
     public cx: number,
     public cy: number,
     /** Ancho del lienzo en celdas: de ahi sale el tamano. Ver `R_FRAC`. */
-    gridW = 400,
+    gridW = 600,
   ) {
     this.r = ballRadius(gridW);
     this.radius = this.r + GRAB_EXTRA;

@@ -5,9 +5,9 @@ import type { Blast, TickCtx } from './index';
 
 const TAU = Math.PI * 2;
 /** Radio de la explosion, en celdas. */
-export const BLAST_R = 42;
+export const BLAST_R = 63;
 /** Rapidez en el centro de la explosion, en celdas/s. */
-const POWER = 520;
+const POWER = 780;
 /**
  * Impulso hacia arriba anadido a todo lo que sale despedido.
  *
@@ -15,7 +15,7 @@ const POWER = 520;
  * deposita a dos celdas y no se ve nada: la explosion parece un chasquido. Con
  * el, el material sube y vuelve a caer, que es lo que se lee como explosion.
  */
-const LIFT = 120;
+const LIFT = 180;
 /** Segundos de mecha. */
 export const FUSE = 2;
 /** Duracion del anillo de choque, en segundos. */

@@ -7,8 +7,15 @@ import {
  * Celdas por frame que puede caer un grano en caída libre. Con valores altos el
  * chorro se rompe en guiones: los granos se separan más de lo que el emisor
  * puede rellenar y deja de leerse como un hilo continuo.
+ *
+ * Cinco y no tres desde que el grano es de 2 px: lo que no puede cambiar es la
+ * velocidad en PANTALLA, y son celdas por frame. Con 5 caen 10 px por frame,
+ * contra los 9 de las 3 celdas de 3 px. El margen de guiones no se estrecha,
+ * al contrario: el caudal subio con el cuadrado de la finura y la velocidad
+ * solo con la finura, asi que la columna va mas poblada que antes —5,2 granos
+ * por fila contra 3,9—.
  */
-const MAX_VEL = 3;
+const MAX_VEL = 5;
 /**
  * Probabilidad de que un grano en caida libre se desplace una celda de lado.
  *
@@ -33,7 +40,7 @@ const MAX_VEL = 3;
  */
 const DRIFT_P = 0.4;
 /** Pasos diagonales que da un grano por frame sobre una rampa. */
-const CHUTE_STEPS = 3;
+const CHUTE_STEPS = 5;
 /** Probabilidad de que un grano atraviese una criba en un frame dado. */
 const SIEVE_P = 0.06;
 /**
@@ -54,14 +61,14 @@ const CREEP_P = 0.8;
  * de caida y acaba desbordando por el extremo. Una cinta real arrastra el
  * monton entero por rozamiento, y sin esto la linea no fluye.
  */
-const BELT_REACH = 5;
+const BELT_REACH = 8;
 /**
  * Pasos diagonales seguidos que puede dar un grano por una ladera.
  * Con uno solo, un chorro intenso apila más rápido de lo que el montón alcanza
  * a repartir y crece una torre vertical imposible. Encadenando la caída se
  * comporta como una avalancha y los conos se mantienen en su ángulo.
  */
-const AVALANCHE_STEPS = 3;
+const AVALANCHE_STEPS = 5;
 
 /**
  * Un paso de simulación.

@@ -24,7 +24,7 @@ export interface InputHooks {
 }
 
 /** Recorrido y duracion por debajo de los cuales un gesto cuenta como toque. */
-const TAP_CELLS = 3;
+const TAP_CELLS = 5;
 const TAP_MS = 400;
 
 /**

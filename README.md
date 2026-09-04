@@ -183,8 +183,30 @@ Cosas que parecen arbitrarias en el código y no lo son:
   a la que toca el borde, y aparecen huecos negros de la nada sin que nada llegue a caer hasta
   abajo. Lo que se ve tiene que salir por el borde del mundo, no evaporarse a media altura.
 - **El techo real del caudal es el ancho de la boquilla, no `rate`.** La fuente solo puede sembrar
-  en las celdas libres de las dos primeras filas, así que una boquilla estrecha rechaza todo lo que
-  no cabe: con tres celdas el máximo eran ~180 granos/s aunque se pidieran 520.
+  en las celdas libres del cono, así que una boquilla estrecha rechaza todo lo que no cabe: con tres
+  celdas el máximo eran ~180 granos/s aunque se pidieran 520.
+- **La fuente no se dibuja: lo único que se ve de ella es la arena saliendo.** Tuvo una tolva
+  ilustrada, y esa tolva estaba resolviendo un problema en vez de no tenerlo. El chorro nacía ya con
+  su ancho final, así que había un punto exacto en el que aparecía una línea de nueve celdas de la
+  nada, y el dibujo se pintaba tres filas por debajo de la siembra justo para taparlo — la arena
+  tenía que salir *de* la pieza y no *debajo* de la pieza. Sembrando en cono desde un vértice de una
+  sola celda no hay costura que tapar: el punto donde la arena aparece deja de ser el fallo y pasa a
+  ser el efecto. El PNG, su cargador y las tres constantes que lo escalaban (`SPOUT_FRAC`, `SOLAPE`,
+  `NOZZLE_SPRITE_ROWS`) están en el historial.
+- **El cono se siembra, no se deja que lo abra la deriva.** Subir `DRIFT_P` era la vía barata y no
+  vale: esa apertura va con la raíz de la distancia, así que no tiene vértice y no se detiene nunca
+  en un ancho, y por encima de 0,4 deja de leerse como un chorro (ver arriba). Sembrar en cono es
+  exacto, se para donde se le dice y no añade una sola rama al bucle caliente.
+- **Cada grano nace en una fila cualquiera del cono y baja hasta encontrar hueco.** Sorteando fila y
+  soltándolo ahí sin más, el vértice sale punteado: es de una celda y se satura, y todo lo que no
+  cabe se pierde. Bajando, lo rechazado rellena las filas anchas — el vértice queda tan macizo como
+  puede estar y el caudal no baja. Medido: 700 granos/s pedidos, 700 puestos.
+- **Abrirse en todo lo que se ve y no en el primer tercio.** Con 22 filas el chorro llega a su
+  ancho enseguida y el resto baja recto; con 34 se está abriendo casi todo el rato que se ve, que es
+  lo que se lee como que crece. Esas dos medidas son del grano grueso de entonces: las 51 filas de
+  `SPREAD_ROWS` son ese mismo cono con el grano de serie de ahora. Es una perilla de gusto: lo único
+  que la ata por abajo es que la caja de
+  agarre de la fuente mide justo el cono, y una más larga se come más sitio de dibujo.
 - **El drenaje también abre si la fuente queda sepultada.** Sin esa salida, si el montón crece hasta
   tapar la boquilla antes de alcanzar el nivel de disparo, deja de emitir, el nivel no vuelve a
   subir y el drenaje no abre nunca: el lienzo se queda lleno para siempre.
@@ -281,9 +303,21 @@ Cosas que parecen arbitrarias en el código y no lo son:
   marca al terminar un arrastre, y no hacerlo era un fallo que costó entender: el botón se quedaba en
   el punto donde la pieza estaba antes de moverla, así que pulsar donde se veía la × dibujaba una
   pared. Se leía como "esta pieza no se puede quitar".
-- **Y donde no se pueda pulsar, no vale.** La fuente de serie vive en la fila 0 y su × caía por
-  encima del borde superior: invisible e imposible de acertar, justo en la pieza de la que más gente
-  quiere deshacerse. Si arriba no cabe, se pone debajo.
+- **Y donde no se pueda pulsar, no vale.** La × de una fuente va por encima de su vértice, así que
+  en una puesta cerca del borde de arriba caía fuera de la pantalla: invisible e imposible de
+  acertar, justo en la pieza de la que más gente quiere deshacerse. Si arriba no cabe, se pone
+  debajo.
+- **A una pieza invisible se la señala por lo que se ve de ella, que es su chorro.** La fuente no
+  tiene cuerpo dibujado y cuelga entera por debajo de su centro —el centro es el vértice, donde
+  nace el primer grano—, así que se agarra por una caja con la forma del cono y no por un círculo
+  centrado ahí. Antes esa caja la daba el tamaño del PNG de la tolva y medía unas 39×39 celdas: se
+  comía los gestos de dibujar en toda esa zona. La del cono es bastante más estrecha y ahora se
+  puede dibujar cerca del chorro.
+- **Y mientras la llevas sí se dibuja: el contorno del cono.** Colocar a ciegas una pieza que no se
+  ve es colocarla al azar, y el fantasma que arrastras desde el dock se pinta llamando al `draw()`
+  de una pieza de verdad. La misma línea aparece durante los dos segundos y medio que la fuente de
+  serie tarda en rehacerse tras una bomba: sin ninguna señal de que va a volver, ese rato sin arena
+  se lee como que la has roto para siempre.
 - **La bola se dibuja, no es una foto.** Hubo un PNG de una esfera y a los 60 px a los que se pinta
   de verdad no quedaba nada de él: el semitono desaparecía en el remuestreo y el borde salía blando,
   cuando todo lo demás en esta escena tiene el canto duro. Dibujada sale de cuatro degradados, es

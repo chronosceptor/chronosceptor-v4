@@ -4,34 +4,57 @@ import { grainColor, type Palette } from './palette';
 import { mulberry32, randFloat, randInt, type Rng } from './rng';
 
 /** Filas del borde inferior reservadas al drenaje: no se puede dibujar en ellas. */
-export const RESERVED_ROWS = 3;
-/**
- * Filas que ocupa la tolva de una fuente por encima de la fila que siembra.
- *
- * Vive aqui, con la fuente, y no en el render que la pinta, porque manda sobre
- * dos cosas a la vez: el dibujo y donde puede estar la fuente. La de serie tenia
- * su boquilla en la fila 0 y una tolva dibujada ahi se sale por arriba de la
- * pantalla.
- */
-export const NOZZLE_H = 14;
+export const RESERVED_ROWS = 5;
 
 /**
- * Filas que hay que dejar libres por encima de la fila de siembra para que
- * quepa el DIBUJO de la tolva.
+ * Filas que tarda el chorro en abrirse desde el vertice hasta su ancho.
  *
- * Va aparte de `NOZZLE_H` porque no miden lo mismo: `NOZZLE_H` es el alto del
- * trazo vectorial, y el dibujo es casi cuadrado y ademas se escala por su cano
- * —ver `SPOUT_FRAC`—, asi que ocupa casi el triple. Con las 17 filas que daba
- * `NOZZLE_H` la tolva salia recortada por el borde de arriba y solo asomaba la
- * punta del cano. Una fuente colocada mas arriba que esto no pinta el dibujo y
- * cae al trazo, que si cabe.
+ * La fuente no se dibuja: lo unico que se ve de ella es la arena saliendo. Por
+ * eso el chorro no puede nacer ya con su ancho final, como nacia cuando habia
+ * una tolva pintada encima que tapaba la fila de siembra: sin nada que la tape,
+ * una linea de nueve celdas que aparece de golpe se lee como una costura. Con
+ * el vertice de una sola celda, el punto donde la arena aparece de la nada deja
+ * de ser el fallo y pasa a ser el efecto.
+ *
+ * Se siembra en cono y no se deja que lo abra la deriva de la caida (`DRIFT_P`,
+ * en `physics.ts`): esa se abre con la raiz de la distancia, asi que no tiene
+ * vertice y no se queda nunca en un ancho, y subirla toca la unica rama del
+ * bucle caliente. Sembrando, la forma es exacta y la fisica no se entera.
+ *
+ * Va en celdas y lo reescala `regrain`: lo que tiene que medir lo mismo es el
+ * cono en PANTALLA. Son 51 con el grano de 2 px y eran 34 con el de 3.
  */
-export const NOZZLE_SPRITE_ROWS = 31;
+export const SPREAD_ROWS = 51;
+
+/**
+ * Fila donde nace el chorro de la fuente de serie.
+ *
+ * Es aire por encima del vertice, y ese aire es el efecto entero: pegado al
+ * borde de arriba no se ve nacer nada, porque el vertice queda fuera de
+ * pantalla o rozandola. Lo que hay que ver es el punto exacto en el que la
+ * arena aparece de la nada.
+ *
+ * Salio del alto que ocupaba el dibujo de la tolva, cuando lo habia, y se
+ * conservo al quitarlo para que en pantalla el chorro siguiera empezando donde
+ * empezaba; ahora la razon es esa medida en pantalla y no el dibujo. Va en
+ * celdas, asi que lo reescala `regrain` con la finura del grano: son 51 con el
+ * grano de 2 px y eran 34 con el de 3.
+ */
+const SOURCE_ROW = 51;
 
 export interface Profile {
   name: 'desktop' | 'portrait';
   /** Pixeles de pantalla por celda. */
   cell: number;
+  /**
+   * Finura del grano respecto al de serie: `cellDeSerie / cell`.
+   *
+   * Uno en el perfil normal. Solo lo mueve `?cell=N`, y esta aqui para que las
+   * piezas que se calibraron en celdas —la boquilla de un emisor colocado, su
+   * cono— puedan reescalarse solas: una medida en celdas escrita a mano vale
+   * para un tamano de grano y para ningun otro.
+   */
+  k: number;
   /**
    * Granos por segundo que suelta la fuente.
    *
@@ -46,9 +69,12 @@ export interface Profile {
    * Semiancho de la boquilla, en celdas.
    *
    * Es el techo real del caudal, no `rate`: la fuente solo puede sembrar en las
-   * celdas libres de las dos primeras filas, asi que una boquilla estrecha
-   * rechaza todo lo que no cabe por mucho que se suba `rate`. Con tres celdas
-   * el maximo eran ~180 granos/s aunque se pidieran 520.
+   * celdas libres del cono, asi que una boquilla estrecha rechaza todo lo que
+   * no cabe por mucho que se suba `rate`. Con tres celdas el maximo eran ~180
+   * granos/s aunque se pidieran 520.
+   *
+   * Es el ancho del FINAL del cono: arriba el chorro es de una celda y se va
+   * abriendo hasta este ancho, ver `SPREAD_ROWS`.
    */
   nozzle: number;
   /** Tope de arena viva, como red de seguridad de rendimiento. */
@@ -64,18 +90,81 @@ export interface Profile {
    * es lo que revuelve los estratos de unas canciones con otras.
    */
   mouth: number;
+  /** Filas que tarda el chorro en abrirse. Ver `SPREAD_ROWS`. */
+  spread: number;
+  /** Fila del vertice del chorro de la fuente de serie. Ver `SOURCE_ROW`. */
+  sourceRow: number;
 }
 
-export function profileFor(cssW: number, cssH: number): Profile {
+export function profileFor(cssW: number, cssH: number, cellOverride?: number): Profile {
+  const base = deviceProfile(cssW, cssH);
+  if (cellOverride === undefined || cellOverride === base.cell) return base;
+  return regrain(base, cellOverride);
+}
+
+/**
+ * El grano fino no es una escala del grueso: es el que hay.
+ *
+ * Toda esta tabla se recalibro al bajar `cell` de 3 a 2 en escritorio y de 4 a 3
+ * en vertical. Los numeros no son «los de antes por 1,5»: son los de antes
+ * llevados a que en PANTALLA todo mida lo mismo que media, que es lo unico que
+ * se ve. Lo que va por longitud subio con la finura y lo que llena area subio
+ * con su cuadrado. Si vuelves a mover `cell`, hay que rehacer los dos grupos —y
+ * ademas las constantes en celdas que viven en `physics`, `ejecta`, `ball`,
+ * `blast`, `bomb` y `render`, que no salen de aqui—. `?cell=N` reescala esta
+ * tabla al vuelo para poder comparar, pero esas otras no las toca.
+ */
+function deviceProfile(cssW: number, cssH: number): Profile {
+  const comun = { k: 1, fillFrac: 0.72, spread: SPREAD_ROWS, sourceRow: SOURCE_ROW };
   const portrait = cssH > cssW || cssW < 720;
   if (portrait) {
     // Algo mas ancha en tactil: el dedo es menos preciso que el raton.
-    return { name: 'portrait', cell: 4, rate: 400, brush: 1.5, nozzle: 3, maxSand: 46000, fillFrac: 0.72, mouth: 34 };
+    return { ...comun, name: 'portrait', cell: 3, rate: 710, brush: 2.0, nozzle: 4, maxSand: 82000, mouth: 45 };
   }
   // Brocha fina: un trazo de una sola celda de grosor ya retiene el material
   // (la regla diagonal exige que la celda lateral tambien este libre), asi que
   // no hay razon fisica para engordarla y con ella se dibuja con precision.
-  return { name: 'desktop', cell: cssW > 2400 ? 4 : 3, rate: 700, brush: 1.0, nozzle: 4, maxSand: 135000, fillFrac: 0.72, mouth: 76 };
+  //
+  // El salto de celda en pantallas muy anchas mantiene el grid mas o menos
+  // constante en celdas —unas 750-850 de ancho—, que es para lo que esta escrito
+  // todo lo demas de esta tabla.
+  return { ...comun, name: 'desktop', cell: cssW > 2400 ? 3 : 2, rate: 1575, brush: 1.5, nozzle: 6, maxSand: 304000, mouth: 114 };
+}
+
+/**
+ * El mismo perfil con otro tamano de grano, para comparar sin recompilar:
+ * `?cell=3` devuelve a ojo el grano grueso de antes, `?cell=4` uno mas gordo.
+ *
+ * Bajar `cell` a secas no da una version fina de esta escena, da otra escena:
+ * todo lo que esta calibrado en celdas encoge en pantalla en la misma
+ * proporcion. Lo que va por longitud —brocha, boquilla, boca del drenaje, el
+ * cono— se multiplica por `k`, y lo que va por superficie —el caudal, que llena
+ * area, y el tope de arena— por `k²`. Sin el `k²` del tope, el drenaje deja de
+ * dispararse: el disparo es una fraccion de las celdas del lienzo, que suben con
+ * el cuadrado, y el emisor se cortaria por el tope mucho antes de llegar.
+ *
+ * Lo que esto NO alcanza son las constantes en celdas de los otros modulos —la
+ * bola, la explosion, la ejecta, los agarres, `MAX_VEL`—, que estan escritas
+ * para el grano de serie y aqui no llegan. Es decir: `?cell=N` sirve para juzgar
+ * la ARENA, no las piezas. Si un tamano nuevo se adopta de verdad, esas hay que
+ * rehacerlas a mano, como se hizo al pasar de 3 a 2.
+ */
+function regrain(p: Profile, cell: number): Profile {
+  const k = p.cell / cell;
+  const largo = (n: number): number => Math.max(1, Math.round(n * k));
+  const area = (n: number): number => Math.round(n * k * k);
+  return {
+    ...p,
+    cell,
+    k,
+    rate: area(p.rate),
+    maxSand: area(p.maxSand),
+    brush: p.brush * k,
+    nozzle: largo(p.nozzle),
+    mouth: largo(p.mouth),
+    spread: largo(p.spread),
+    sourceRow: largo(p.sourceRow),
+  };
 }
 
 /**
@@ -102,9 +191,29 @@ export class Source {
     readonly rate: number,
     private readonly colorPeriod: number,
     private readonly rng: Rng,
-    /** Fila donde siembra. Su tolva se pinta por encima, ver `NOZZLE_H`. */
+    /** Fila del vertice del cono: donde aparece el primer grano. */
     public y = 0,
+    /**
+     * Filas que tarda en abrirse. Ver `SPREAD_ROWS`, que es el valor de serie.
+     *
+     * Es un dato de la fuente y no una constante del modulo porque con el grano
+     * fino hacen falta mas filas para el mismo cono en pantalla.
+     */
+    readonly spread = SPREAD_ROWS,
   ) {}
+
+  /**
+   * Semiancho de la siembra en la fila `r` del cono, en celdas.
+   *
+   * Cero en el vertice —una sola celda— y `halfWidth` al final. Vive en la
+   * fuente y no en quien la pinta porque el contorno que se ensena al
+   * arrastrarla tiene que ser exactamente por donde va a salir la arena: si
+   * fuesen dos cuentas distintas, acabarian siendo dos formas distintas.
+   */
+  halfAt(r: number): number {
+    if (r >= this.spread) return this.halfWidth;
+    return Math.round((this.halfWidth * (r + 1)) / this.spread);
+  }
 
   /** Arranca un lote de color nuevo. Lo llama el cambio de cancion. */
   newBatch(): void {
@@ -127,11 +236,23 @@ export class Source {
 
     let placed = 0;
     for (let k = 0; k < n; k++) {
-      const x = this.x + randInt(rand, -this.halfWidth, this.halfWidth);
-      // Se siembra en dos filas: con una sola, los granos que no caben se
-      // pierden y el chorro sale entrecortado.
-      if (g.addSand(x, this.y, grainColor(palette, rand, this.dominant, 0.94))) placed++;
-      else if (g.addSand(x, this.y + 1, grainColor(palette, rand, this.dominant, 0.94))) placed++;
+      // Cada grano nace en una fila cualquiera del cono y baja hasta encontrar
+      // hueco, sorteando su x dentro del semiancho de la fila en la que acabe.
+      //
+      // Bajar es lo que hace que el vertice salga macizo en vez de punteado:
+      // las filas de arriba son de una o dos celdas y se saturan enseguida, y
+      // lo que no cabe rellena las filas anchas en vez de perderse. Es la misma
+      // razon por la que antes se sembraba en dos filas y no en una, extendida
+      // al cono entero — y de paso sube el techo real de caudal, que es el
+      // numero de celdas donde se puede sembrar y no `rate`.
+      for (let r = randInt(rand, 0, this.spread - 1); r <= this.spread; r++) {
+        const hw = this.halfAt(r);
+        const x = this.x + randInt(rand, -hw, hw);
+        if (g.addSand(x, this.y + r, grainColor(palette, rand, this.dominant, 0.94))) {
+          placed++;
+          break;
+        }
+      }
     }
     this.blockedFor = placed === 0 ? this.blockedFor + dt : 0;
   }
@@ -149,8 +270,13 @@ export interface World {
   profile: Profile;
 }
 
-export function createWorld(cssW: number, cssH: number, fillOverride?: number): World {
-  const profile = profileFor(cssW, cssH);
+export function createWorld(
+  cssW: number,
+  cssH: number,
+  fillOverride?: number,
+  cellOverride?: number,
+): World {
+  const profile = profileFor(cssW, cssH, cellOverride);
   if (fillOverride !== undefined) profile.fillFrac = fillOverride;
   const w = Math.max(80, Math.floor(cssW / profile.cell));
   const h = Math.max(80, Math.floor(cssH / profile.cell));
@@ -165,14 +291,8 @@ export function createWorld(cssW: number, cssH: number, fillOverride?: number): 
     profile.rate,
     26,
     mulberry32((Date.now() ^ 0x9e3779b9) >>> 0),
-    // No en la fila 0: su tolva se pinta por encima de la fila que siembra y
-    // ahi arriba no cabria. Un chorro que empieza unas filas mas abajo no se
-    // nota; una fuente sin tolva, si. Las tres filas de mas son aire por encima
-    // de la boca, que pegada al borde parece recortada.
-    //
-    // Lo que manda es el dibujo, no el trazo: `NOZZLE_H` daba 17 y con el PNG
-    // la tolva salia recortada por arriba — solo asomaba la punta del cano.
-    NOZZLE_SPRITE_ROWS + 3,
+    profile.sourceRow,
+    profile.spread,
   );
 
   return { grid, source, drain, profile };

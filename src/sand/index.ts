@@ -18,6 +18,13 @@ export interface BootOptions {
    * Bajarla acorta muchisimo el ciclo y hace practicable probar la descarga.
    */
   fillFrac?: number;
+  /**
+   * Sobreescribe los pixeles por celda: el tamano del grano.
+   *
+   * Para comparar granos en la misma sesion (`?cell=2`). No es solo el tamano:
+   * el perfil entero se reescala con el, ver `regrain` en `world.ts`.
+   */
+  cell?: number;
 }
 
 /**
@@ -155,7 +162,7 @@ export function boot(opts: BootOptions): SandApp {
    * vas a pulsarlo: el raton llega donde estaba y la pieza ya no. Un boton no
    * puede huir del cursor.
    */
-  const BADGE_R = 4.5;
+  const BADGE_R = 7;
   let badge: Point | null = null;
 
   function badgeAt(g: Gadget): Point {
@@ -234,7 +241,7 @@ export function boot(opts: BootOptions): SandApp {
     const cssH = container.clientHeight || window.innerHeight;
 
     input?.destroy();
-    world = createWorld(cssW, cssH, opts.fillFrac);
+    world = createWorld(cssW, cssH, opts.fillFrac, opts.cell);
     if (previous) {
       transferDrawing(previous.grid, world.grid);
       // La boquilla fija se arrastra, asi que donde este es cosa del usuario y
@@ -616,7 +623,12 @@ export function boot(opts: BootOptions): SandApp {
       // Nace fuera de la pantalla: hasta el primer movimiento no hay sitio al
       // que apuntar, y aparecer en la esquina superior izquierda seria un
       // parpadeo en un sitio que no significa nada.
-      ghost = createGadget(kind, -1000, -1000, world.grid.w);
+      ghost = createGadget(kind, -1000, -1000, { gridW: world.grid.w, k: world.profile.k });
+      // El fantasma se lleva en la mano igual que una pieza ya colocada, y hay
+      // piezas a las que eso les cambia el dibujo: la fuente no se ve, asi que
+      // solo mientras la llevas ensena el cono por donde va a salir la arena.
+      // Sin esto, colocar una fuente desde el dock seria a ciegas.
+      ghost.held = true;
       ghostOk = false;
       ghostFrom = null;
       ghostMoved = false;
@@ -642,6 +654,10 @@ export function boot(opts: BootOptions): SandApp {
       const g = ghost;
       ghost = null;
       if (!g) return false;
+      // Ya no se lleva en la mano. Sin esto la fuente se quedaba con su cono de
+      // colocacion pintado para siempre, porque nada mas lo apaga: el `held` de
+      // una pieza agarrada lo quita el soltar, y el fantasma no pasa por ahi.
+      g.held = false;
 
       // Un toque sin arrastre la coloca en el centro de la escena, bajo el
       // chorro: es donde se ve lo que hace la pieza.
