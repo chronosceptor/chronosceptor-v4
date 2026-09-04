@@ -123,7 +123,7 @@ export function detonateAt(c: TickCtx, cx: number, cy: number): void {
  * Aro del alcance y arco de mecha, lo que lleva encima cualquier cosa
  * encendida.
  *
- * El aro va tenue y discontinuo, y no es decoracion: con un radio de 42 celdas,
+ * El aro va tenue y discontinuo, y no es decoracion: con un radio de 63 celdas,
  * colocar una bomba a ciegas es descubrir despues que se ha llevado medio
  * dibujo por delante. El arco se vacia en sentido horario desde arriba y dice
  * cuanto queda sin numeros ni barra de progreso.

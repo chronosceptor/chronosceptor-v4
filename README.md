@@ -52,7 +52,7 @@ Y una excepción, solo para la bomba: **tocarla la detona** sin esperar a la mec
 
 | Pieza | Qué hace |
 |---|---|
-| **Bomba** | Mecha de 2 s con un anillo que se vacía; revienta un radio de 42 celdas —arena, **paredes** y **cualquier pieza que pille dentro**— y se consume |
+| **Bomba** | Mecha de 2 s con un anillo que se vacía; revienta un radio de 63 celdas (unos 126 px) —arena, **paredes** y **cualquier pieza que pille dentro**— y se consume |
 | **Fuente** | Un segundo chorro, con su propio color dominante de la paleta |
 | **Bola** | Rebota en los bordes, en tus paredes y contra las otras bolas, y se come la arena que toca. Cada golpe **desportilla la pared** |
 

@@ -59,7 +59,10 @@ La justificación de fondo de cada decisión de física está en el README, secc
   **raíz del repo**, no en `.playwright-mcp/`, y lo que guarda es **JSON**, así que `base64 -d` a
   secas falla — hay que quitarle las comillas (`json.load`) antes de decodificar. Devolviendo un
   objeto con varios `toDataURL` se sacan varios recortes de una sola llamada.
-- **Un fotograma suelto del chorro engaña: parece granos sueltos.** A 700 granos/s cada fila del
+- **Para medir sin `dump()`: `getImageData` sobre `#arena`.** El canvas es del tamaño del grid —un
+  píxel por celda— y alfa > 0 marca celda ocupada. Una fila entera cuesta
+  `ctx.getImageData(0, y, gw, 1)` y sale directa la lista de x del chorro.
+- **Un fotograma suelto del chorro engaña: parece granos sueltos.** A 1.575 granos/s cada fila del
   chorro tiene un puñado de granos en un instante dado, y el ojo no ve eso, ve la estela. Para
   juzgar la forma hay que componer ~24 fotogramas seguidos en un canvas auxiliar con
   `globalAlpha = 0.5` dentro de un bucle de `requestAnimationFrame`: eso da la envolvente, que es
@@ -94,7 +97,9 @@ La justificación de fondo de cada decisión de física está en el README, secc
   montón, no el chorro: salieron anchos de 12 y 18 celdas que eran del cono y me hicieron
   creer que un cambio funcionaba mucho mejor de lo que funcionaba. Y el ancho **mín-máx de
   una fila no sirve** — lo fijan dos granos sueltos y sale plano pase lo que pase. Lo que
-  se ve es la desviación típica de la x de los granos de esa fila.
+  se ve es la desviación típica de la x de los granos de esa fila. Y esa σ hay que **acumularla
+  sobre ~90 fotogramas**: en uno solo la fila trae 4-11 granos y el número salta entre 5,8 y 12,3 px
+  sin que haya cambiado nada.
 - **Una medida con la bola dentro es ruidosa: su trayectoria es aleatoria.** El mismo
   cuenco, la misma bola y los mismos 12 s dieron 46, 61 y 42 celdas de pared destruidas.
   Hacen falta tres pasadas para que la media signifique algo, y aun así no da para afinar
@@ -107,7 +112,8 @@ La justificación de fondo de cada decisión de física está en el README, secc
   hay que trasladarlo a mano.
 - **`inspect().piezas` no cuenta la fuente principal, pero `donde` sí la lista.** Es la pieza de
   serie (`permanent`) y no ocupa hueco del tope: con el lienzo lleno, `piezas` dice 10 y `donde`
-  trae 11. `donde` da además el `r` de cada pieza.
+  trae 11. El `r` que da `donde` es el de **agarre**, no el del cuerpo: la bola le suma `GRAB_EXTRA`,
+  así que un `r` de 25 es una bola de 17.
 - **La fuente de serie ya no es indestructible: se vuela, se tira y `clear()` la repone.** Un lienzo
   sin ninguna fuente es un estado válido y no cae arena; si al medir no crece `sand`, mira primero
   si hay fuente antes de sospechar de la física.
@@ -116,8 +122,9 @@ La justificación de fondo de cada decisión de física está en el README, secc
   dos medidas seguidas: un barrido de sondas que agarra la pieza la va arrastrando, y yo seguía
   calculando los puntos desde el centro original. Si sondeas agarres, lee `donde` **antes de cada
   sonda** y calcula relativo a eso, o recarga la página entre una y otra.
-- **El tamaño de la bola sale del ancho del lienzo, no de un número de celdas** (10 celdas de radio
-  en escritorio, 5 en vertical). Un número absoluto medido en un perfil no vale en el otro.
+- **El tamaño de la bola sale del ancho del lienzo** (`R_FRAC`), pero con el grano fino **mandan los
+  topes**: las 17 celdas de radio en escritorio y 8 en vertical son `R_MAX`/`R_MIN`, no la fracción,
+  que se pasa de largo en los dos perfiles. Un número absoluto medido en un perfil no vale en el otro.
 - **`inspect().perdidos` es acumulado de toda la sesión y `clear()` no lo reinicia.** Vale para ver
   si algo sangra arena, pero solo mirando el delta en una ventana: leerlo en seco y ver 95 no acusa
   a lo que acabas de tocar.
@@ -226,6 +233,14 @@ Todo desde la consola del navegador, sobre `window.fabrica`:
   `requestAnimationFrame`: el estado del señalado (la × de quitar) lo fija el pintado, no el evento.
 - **El MCP de Playwright deja el perfil bloqueado entre llamadas** («Browser is already in use»).
   `pkill -f mcp-chrome-<id>` y volver a navegar. Pasó tres veces en una sola sesión.
+- **Pero ese `pkill` no siempre tiene a quién matar: a veces el candado lo sostiene el Chrome del
+  usuario.** Si `ps aux | grep Chrome` no enseña el id del perfil en la línea, el que lo tiene es su
+  navegador de verdad y matarlo le cierra sus pestañas: ahí no hay cura, se acabó la sesión de
+  navegador y hay que rematar la verificación por otro lado. Y **no cierres pestañas por índice**
+  (`browser_tabs close`) — los índices se mueven entre llamadas y te llevas una del usuario.
+- **Un `browser_evaluate` largo tumba el navegador entero.** Uno con 12 s de espera dentro dejó
+  «Target crashed» y se llevó también pestañas ajenas — es del navegador, no de la app. Parte las
+  medidas en llamadas de pocos segundos.
 - **Para saber si un punto agarra una pieza, mira si la pieza se movió** — nunca si apareció pared.
   Cerca del borde superior no se puede dibujar, así que «no hay pared nueva» sale igual cuando el
   gesto agarró que cuando no llegó a hacer nada, y da un mapa del área activa que es pura ficción.

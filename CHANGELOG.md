@@ -30,6 +30,11 @@ versionado según [SemVer](https://semver.org/lang/es/).
   medía: lo que va por longitud sube con la finura y lo que llena área con su cuadrado. Con ellos
   van las constantes en celdas de `physics`, `ejecta`, `ball`, `blast`, `bomb` y `render`, que no
   salen del perfil.
+- **La caída libre pasa de 3 a 5 celdas por frame** (`MAX_VEL`). Es la única del lote que no es un
+  cambio de escala sino de comportamiento: son celdas por frame, así que con el grano de 2 px la
+  arena cae 10 px por frame contra los 9 de antes. El margen de guiones se ensancha en vez de
+  estrecharse, porque el caudal subió con el cuadrado de la finura y la velocidad solo con la
+  finura: la columna va a 5,2 granos por fila contra los 3,9 de antes.
 - **La ficha de la fuente en el dock es el chorro, no una tolva.** Prometía una pieza que en el
   lienzo ya no existe.
 - **Otra ilustración de fondo.** Misma ruta (`public/background.webp`) y mismo tratamiento —velo y
