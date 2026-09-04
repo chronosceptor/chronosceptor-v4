@@ -344,6 +344,7 @@ export function boot(opts: BootOptions): SandApp {
           g.cy = home.y;
         }
         g.onMoved?.();
+        g.onPlaced?.();
       },
     });
   }
@@ -671,6 +672,9 @@ export function boot(opts: BootOptions): SandApp {
 
       g.onMoved?.();
       if (!gadgets.add(g)) return false;
+      // Ya esta puesta: que lo diga. Solo la fuente tiene algo que decir aqui,
+      // porque es la unica que no se ve al aparecer — ver `onPlaced`.
+      g.onPlaced?.();
       announce();
       return true;
     },

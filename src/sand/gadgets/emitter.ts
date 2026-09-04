@@ -33,6 +33,20 @@ const COLOR_PERIOD = 26;
  * volver, porque sin ella no hay arena.
  */
 const REBIRTH = 2.5;
+/**
+ * Lo que sigue viendose el cono despues de soltar la fuente, en segundos.
+ *
+ * Es el acuse de recibo de la colocacion. Sin el, poner una fuente de un toque
+ * en la ficha del dock no se distingue de no ponerla: aterriza en el centro,
+ * como la bola y la bomba, pero ahi no hay nada que aparezca —no tiene cuerpo—
+ * y su chorro sale por dentro del que ya baja del centro. La escena queda
+ * identica y el gesto parece perdido.
+ *
+ * Se va desvaneciendo en vez de apagarse de golpe porque lo que hay que leer no
+ * es el contorno, es donde ha caido: el desvanecido deja mirar el sitio un rato
+ * despues de haber dejado de mirar la ficha.
+ */
+const PLACED_HINT = 1.2;
 
 /**
  * Fuente de arena colocable.
@@ -77,6 +91,8 @@ export class Emitter implements Gadget {
   private readonly wick = new Wick();
   /** Segundos que le quedan a la fija para volver de una explosion. */
   private dark = 0;
+  /** Segundos que le quedan al acuse de recibo de la colocacion. */
+  private placed = 0;
 
   /**
    * `adoptada` es la `Source` que ya existia; solo la pasa la fuente fija de la
@@ -120,6 +136,10 @@ export class Emitter implements Gadget {
     this.source.y = this.cy;
   }
 
+  onPlaced(): void {
+    this.placed = PLACED_HINT;
+  }
+
   clear(_g: Grid): void {
     // Sin cuerpo que borrar.
   }
@@ -139,6 +159,10 @@ export class Emitter implements Gadget {
   }
 
   tick(c: TickCtx, dt: number): void {
+    // Antes de cualquier salida temprana: el acuse de recibo corre igual aunque
+    // la fuente este reventada, o se quedaria congelado esperando a que vuelva.
+    if (this.placed > 0) this.placed -= dt;
+
     // Volada y rehaciendose: ni siembra ni se pinta entera. Va antes que la
     // mecha porque la mecha ya esta apagada — este es el rato de despues.
     if (this.dark > 0) {
@@ -167,8 +191,9 @@ export class Emitter implements Gadget {
    * En reposo no se pinta nada: la fuente es invisible y lo unico que se ve de
    * ella es la arena saliendo del vertice y abriendose. De eso se trata.
    *
-   * Solo hay tres momentos en los que si tiene que verse algo, y ninguno es el
-   * normal: mientras la llevas, mientras esta reventada y mientras vuelve.
+   * Solo hay cuatro momentos en los que si tiene que verse algo, y ninguno es
+   * el normal: mientras la llevas, el instante justo despues de soltarla,
+   * mientras esta reventada y mientras vuelve.
    */
   draw(d: DrawCtx): void {
     if (this.wick.blown) {
@@ -192,6 +217,15 @@ export class Emitter implements Gadget {
     if (this.held) {
       const { ctx } = d;
       ctx.save();
+      drawJetHint(d, this.source, this.cx, this.cy);
+      ctx.restore();
+    } else if (this.placed > 0) {
+      // Recien colocada: el mismo cono, apagandose. Es la continuacion natural
+      // del que se veia mientras la llevabas —y el unico que se llega a ver
+      // cuando la pieza se coloca de un toque, sin arrastre ninguno.
+      const { ctx } = d;
+      ctx.save();
+      ctx.globalAlpha = this.placed / PLACED_HINT;
       drawJetHint(d, this.source, this.cx, this.cy);
       ctx.restore();
     }

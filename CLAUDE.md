@@ -68,9 +68,17 @@ La justificación de fondo de cada decisión de física está en el README, secc
   `globalAlpha = 0.5` dentro de un bucle de `requestAnimationFrame`: eso da la envolvente, que es
   lo que se ve de verdad. Con el fotograma suelto estuve a punto de dar por malo un cono que en
   pantalla se lee perfectamente.
-- **El navegador del MCP corre a ~5 fps** (`inspect().fps` lo dice). La arena se acumula cinco
-  veces más despacio que en pantalla: 349 granos tras 11 s me hizo sospechar del emisor cuando
-  no pasaba nada. Mira `fps` antes de interpretar cualquier serie temporal.
+- **El navegador del MCP no siempre corre a la misma velocidad** (`inspect().fps` lo dice). Una vez
+  iba a ~5 fps y la arena se acumulaba cinco veces más despacio que en pantalla: 349 granos tras
+  11 s me hicieron sospechar del emisor cuando no pasaba nada. Otra sesión entera fue a 120. Mira
+  `fps` antes de interpretar cualquier serie temporal, y no des por buena ninguna de las dos cifras.
+- **Una medida de varios minutos se hace con un `setInterval` dentro de la página, no esperando en
+  la llamada.** Un `browser_evaluate` largo tumba el navegador (ver arriba), así que la serie se
+  acumula sola en un global —`window.__m = {s: []}` y un `setInterval` que apunta `inspect()` cada
+  15 s— y se recoge después con llamadas de un par de segundos. Para dejar pasar el tiempo entre
+  recogidas, un `sleep` en Bash **en segundo plano**; en primer plano está bloqueado. Así se midió
+  un llenado de 7 minutos sin una sola llamada larga. Y no edites ningún archivo mientras corre: el
+  HMR reinicia la escena y la serie deja de significar nada.
 - **`astro preview` no funciona con el adaptador de Netlify** (el proceso muere antes de
   escuchar), así que no hay forma fácil de medir contra un build de producción.
 - **Verifica que una edición aterrizó antes de medir nada.** Dos reemplazos de texto con
@@ -138,9 +146,23 @@ La justificación de fondo de cada decisión de física está en el README, secc
   calibrado en celdas encoge en pantalla en la misma proporción, así que bajar `cell` a secas no da
   una versión fina de esta escena: da otra escena. La regla del reescalado es que **lo que va por
   longitud sube con la finura y lo que llena área sube con su cuadrado** —brocha, boquilla, boca del
-  drenaje y cono por `k`; caudal y tope de arena por `k²`—. Sin el `k²` del tope, el drenaje deja de
-  dispararse: el disparo es una fracción de las celdas del lienzo, que suben al cuadrado, y el
-  emisor se corta por el tope mucho antes de llegar.
+  drenaje y cono por `k`; caudal por `k²`—. El tope de arena ya no está en esa tabla: es una
+  fracción de las celdas del lienzo (`SAND_CAP`, en `world.ts`), así que sube solo con la finura y
+  con el tamaño de la pantalla. Cuando era un número absoluto —304.000, justo el lienzo entero de
+  este portátil— en un 4K o un ultrapanorámico dejaba de ser una red de seguridad y pasaba a ser el
+  tope de verdad: el emisor se cortaba ahí y el drenaje no llegaba a dispararse nunca.
+- **Para llenar el lienzo deprisa, fuentes repartidas a lo ancho — apiladas en el mismo eje se
+  ahogan entre ellas.** Cada una solo puede sembrar en las celdas libres de su cono, y dos conos en
+  la misma columna se pelean por las mismas: cinco en fila vertical daban 680 granos/s, menos que
+  la de serie sola. Seis repartidas a lo ancho dan 8.200/s y llenan hasta el disparo del drenaje en
+  40 s en vez de en varios minutos.
+- **El techo de arena de la escena no lo pone ningún parámetro: lo pone el cono.** Con la fuente de
+  serie —una sola, central— la arena se asienta en un talud que acaba tocando la boquilla, y ahí la
+  fuente se ahoga en su propio montón. Medido: a los 7 minutos, 140.000 granos (el 46% del lienzo),
+  el pico en la fila 57 contra la boquilla en la 51, y el caudal caído de 1.575 a 128 granos/s. El
+  disparo del drenaje está en 219.000, así que **con una sola fuente no se alcanza nunca** y el
+  ciclo de descarga no llega a ocurrir. Con siete fuentes repartidas arriba sí: 219.000 en 40 s y el
+  drenaje abriendo por nivel. Si mides el llenado, cuenta con eso antes de sospechar del emisor.
 - **`regrain` (`world.ts`) solo alcanza a la tabla del perfil, no a las constantes en celdas de los
   demás módulos.** `MAX_VEL`, `CHUTE_STEPS` y `AVALANCHE_STEPS` en `physics`, la gravedad y el tope
   de la `ejecta`, `BLAST_R`, el cuerpo y el agarre de la bomba, el radio de la bola, `TAP_CELLS`,

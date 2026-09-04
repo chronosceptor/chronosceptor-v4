@@ -77,7 +77,12 @@ export interface Profile {
    * abriendo hasta este ancho, ver `SPREAD_ROWS`.
    */
   nozzle: number;
-  /** Tope de arena viva, como red de seguridad de rendimiento. */
+  /**
+   * Tope de arena viva, como red de seguridad de rendimiento.
+   *
+   * No sale de la tabla del perfil sino del lienzo: lo pone `createWorld` a
+   * partir de las celdas que hay. Ver `SAND_CAP`.
+   */
   maxSand: number;
   /** Fraccion del lienzo que se deja llenar antes de que el fondo empiece a drenar. */
   fillFrac: number;
@@ -96,7 +101,36 @@ export interface Profile {
   sourceRow: number;
 }
 
-export function profileFor(cssW: number, cssH: number, cellOverride?: number): Profile {
+/**
+ * El perfil tal y como se escribe a mano: todo menos el tope de arena, que no
+ * es una propiedad del dispositivo sino del lienzo que salga. Ver `SAND_CAP`.
+ */
+type DeviceProfile = Omit<Profile, 'maxSand'>;
+
+/**
+ * Tope de arena viva, como fraccion de las celdas del lienzo.
+ *
+ * Es una red de seguridad de rendimiento y nada mas: por debajo manda el
+ * drenaje, que abre al `fillFrac` (72%), asi que este numero no deberia
+ * alcanzarse jamas jugando.
+ *
+ * Iba escrito en granos absolutos —304.000, que era justo el lienzo entero de
+ * un portatil— y en una pantalla grande dejaba de ser una red para ser el tope
+ * de verdad: un lienzo 4K pasa de 400.000 celdas y uno ultrapanoramico de
+ * 550.000, asi que el emisor se cortaba aqui y el drenaje no llegaba a abrir
+ * nunca. Como fraccion sube sola con el lienzo, y de paso desaparece el `k²`
+ * que habia que acordarse de aplicarle al cambiar la finura del grano: las
+ * celdas ya suben con el cuadrado ellas solas.
+ *
+ * Que no sea 1 es a proposito: un lienzo lleno hasta la ultima celda no es un
+ * estado de juego, es que algo se ha ido de las manos, y ahi la red tiene que
+ * existir. Que el rendimiento aguanta esta medido —200.000 granos con siete
+ * fuentes cuestan 2,6 ms de simulacion de un presupuesto de 16,7— asi que el
+ * tope no esta puesto para proteger a los fps de una partida normal.
+ */
+const SAND_CAP = 0.95;
+
+export function profileFor(cssW: number, cssH: number, cellOverride?: number): DeviceProfile {
   const base = deviceProfile(cssW, cssH);
   if (cellOverride === undefined || cellOverride === base.cell) return base;
   return regrain(base, cellOverride);
@@ -114,12 +148,12 @@ export function profileFor(cssW: number, cssH: number, cellOverride?: number): P
  * `blast`, `bomb` y `render`, que no salen de aqui—. `?cell=N` reescala esta
  * tabla al vuelo para poder comparar, pero esas otras no las toca.
  */
-function deviceProfile(cssW: number, cssH: number): Profile {
+function deviceProfile(cssW: number, cssH: number): DeviceProfile {
   const comun = { k: 1, fillFrac: 0.72, spread: SPREAD_ROWS, sourceRow: SOURCE_ROW };
   const portrait = cssH > cssW || cssW < 720;
   if (portrait) {
     // Algo mas ancha en tactil: el dedo es menos preciso que el raton.
-    return { ...comun, name: 'portrait', cell: 3, rate: 710, brush: 2.0, nozzle: 4, maxSand: 82000, mouth: 45 };
+    return { ...comun, name: 'portrait', cell: 3, rate: 710, brush: 2.0, nozzle: 4, mouth: 45 };
   }
   // Brocha fina: un trazo de una sola celda de grosor ya retiene el material
   // (la regla diagonal exige que la celda lateral tambien este libre), asi que
@@ -128,7 +162,7 @@ function deviceProfile(cssW: number, cssH: number): Profile {
   // El salto de celda en pantallas muy anchas mantiene el grid mas o menos
   // constante en celdas —unas 750-850 de ancho—, que es para lo que esta escrito
   // todo lo demas de esta tabla.
-  return { ...comun, name: 'desktop', cell: cssW > 2400 ? 3 : 2, rate: 1575, brush: 1.5, nozzle: 6, maxSand: 304000, mouth: 114 };
+  return { ...comun, name: 'desktop', cell: cssW > 2400 ? 3 : 2, rate: 1575, brush: 1.5, nozzle: 6, mouth: 114 };
 }
 
 /**
@@ -139,9 +173,10 @@ function deviceProfile(cssW: number, cssH: number): Profile {
  * todo lo que esta calibrado en celdas encoge en pantalla en la misma
  * proporcion. Lo que va por longitud —brocha, boquilla, boca del drenaje, el
  * cono— se multiplica por `k`, y lo que va por superficie —el caudal, que llena
- * area, y el tope de arena— por `k²`. Sin el `k²` del tope, el drenaje deja de
- * dispararse: el disparo es una fraccion de las celdas del lienzo, que suben con
- * el cuadrado, y el emisor se cortaria por el tope mucho antes de llegar.
+ * area— por `k²`. El tope de arena ya no esta aqui y no hay que acordarse de el:
+ * sale de las celdas del lienzo, que suben con el cuadrado ellas solas. Cuando
+ * era un numero de esta tabla y se olvidaba el `k²`, el emisor se cortaba por el
+ * tope antes de que el drenaje llegara a dispararse nunca.
  *
  * Lo que esto NO alcanza son las constantes en celdas de los otros modulos —la
  * bola, la explosion, la ejecta, los agarres, `MAX_VEL`—, que estan escritas
@@ -149,7 +184,7 @@ function deviceProfile(cssW: number, cssH: number): Profile {
  * la ARENA, no las piezas. Si un tamano nuevo se adopta de verdad, esas hay que
  * rehacerlas a mano, como se hizo al pasar de 3 a 2.
  */
-function regrain(p: Profile, cell: number): Profile {
+function regrain(p: DeviceProfile, cell: number): DeviceProfile {
   const k = p.cell / cell;
   const largo = (n: number): number => Math.max(1, Math.round(n * k));
   const area = (n: number): number => Math.round(n * k * k);
@@ -158,7 +193,6 @@ function regrain(p: Profile, cell: number): Profile {
     cell,
     k,
     rate: area(p.rate),
-    maxSand: area(p.maxSand),
     brush: p.brush * k,
     nozzle: largo(p.nozzle),
     mouth: largo(p.mouth),
@@ -276,10 +310,13 @@ export function createWorld(
   fillOverride?: number,
   cellOverride?: number,
 ): World {
-  const profile = profileFor(cssW, cssH, cellOverride);
+  const base = profileFor(cssW, cssH, cellOverride);
+  const w = Math.max(80, Math.floor(cssW / base.cell));
+  const h = Math.max(80, Math.floor(cssH / base.cell));
+  // El tope de arena se cierra aqui y no en la tabla: es una fraccion de las
+  // celdas que han salido, no un numero escrito para un tamano de pantalla.
+  const profile: Profile = { ...base, maxSand: Math.round(w * h * SAND_CAP) };
   if (fillOverride !== undefined) profile.fillFrac = fillOverride;
-  const w = Math.max(80, Math.floor(cssW / profile.cell));
-  const h = Math.max(80, Math.floor(cssH / profile.cell));
   const grid = new Grid(w, h);
   const high = Math.round(w * h * profile.fillFrac);
   const drain = new Drain(profile.mouth, high, Math.round(high * 0.5));

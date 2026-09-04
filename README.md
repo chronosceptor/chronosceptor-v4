@@ -213,7 +213,31 @@ Cosas que parecen arbitrarias en el código y no lo son:
 - **Llenar la pantalla no es un problema de rendimiento.** Medido: con 90.000 granos la simulación
   cuesta 1,4 ms por frame de un presupuesto de 16,7. Las celdas despiertas se mantienen planas sin
   importar cuánta arena haya, porque los granos asentados se duermen: el coste va con la arena en
-  movimiento, no con la total.
+  movimiento, no con la total. Vuelto a medir con el lienzo mucho más lleno: 200.000 granos y siete
+  fuentes a la vez cuestan 2,6 ms, y a 120 fps.
+- **Cuánta arena cabe no lo decide ningún tope, lo decide el talud.** Con la fuente de serie —una
+  sola y central— el montón se asienta en un cono cuyo vértice acaba tocando la boquilla, y a partir
+  de ahí la fuente se ahoga en su propio montón: medido, 140.000 granos a los 7 minutos, el pico a
+  seis filas de la boquilla y el caudal caído de 1.575 a 128 granos/s. El disparo del drenaje está
+  en 219.000, así que con una sola fuente **no se alcanza nunca** y el ciclo de descarga no llega a
+  ocurrir; con siete fuentes repartidas arriba se alcanza en 40 s. Subir el nivel de disparo no
+  arregla nada, y de hecho no tiene adónde subir: al 72% la superficie plana queda en la fila 113 y
+  el cono del chorro acaba en la 102, o sea que ya está a once filas de empezar a taponar la
+  boquilla. Quien quiera más arena, más chorros.
+- **Lo que sí tiende el talud es hasta dónde mira el arrastre (`CREEP_REACH`).** Un grano se aparta
+  hacia un escalón si lo tiene a su alcance, así que ese alcance es la pendiente en la que el montón
+  deja de tener razones para moverse. Estuvo clavado en dos celdas, que es lo que dejaba el talud a
+  poco menos de 45°; con cinco, la escena lleva un 11% más de arena en cada instante (135.400 granos
+  a los 6 minutos contra 121.000) y cubre el ancho del lienzo treinta filas más arriba, sin que la
+  simulación se mueva de sus 2-3,6 ms. No es la diferencia entre un cono y una llanura: el cono
+  sigue siendo un cono, porque la arena llega al vértice más deprisa de lo que el arrastre la
+  reparte. Es una perilla de grado, no un cambio de forma.
+- **El tope de arena es una fracción del lienzo, no un número de granos.** Es una red de seguridad
+  de rendimiento —por debajo manda siempre el drenaje— y como número absoluto sólo era una red en la
+  pantalla en la que se midió: 304.000 granos es el lienzo entero de un portátil, pero un 4K pasa de
+  400.000 celdas y un ultrapanorámico de 550.000, y ahí el emisor se cortaba por el tope antes de
+  que el drenaje llegara a abrir. Como fracción sube sola con la pantalla y con la finura del grano,
+  y de paso deja de ser una de las cosas que había que acordarse de reescalar a mano.
 - **Las ocho paletas están escritas a mano, no sacadas de un generador.** El fondo es `#0B0B0C` y un
   color por debajo de ~0,45 de luminancia deja de leerse como arena: pasa a ser ruido oscuro. Las
   paletas «trending» de cualquier generador están pensadas sobre blanco y la mitad de sus colores

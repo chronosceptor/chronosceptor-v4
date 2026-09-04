@@ -20,8 +20,9 @@ versionado según [SemVer](https://semver.org/lang/es/).
   ancho final, así que había un punto en el que aparecía una línea de nueve celdas de la nada, y el
   dibujo bajaba tres filas por debajo de la siembra justo para taparlo. Ahora se siembra en cono
   desde un vértice de una sola celda: no hay costura que tapar, y el punto donde la arena aparece
-  deja de ser el fallo y pasa a ser el efecto. Solo se pinta el contorno del cono en los tres
-  momentos en que hace falta — mientras la llevas, mientras está reventada y mientras vuelve.
+  deja de ser el fallo y pasa a ser el efecto. Solo se pinta el contorno del cono en los cuatro
+  momentos en que hace falta — mientras la llevas, justo después de soltarla, mientras está
+  reventada y mientras vuelve.
 - **La caja de agarre de la fuente es la del cono y no la del dibujo.** Medía unas 39×39 celdas y se
   comía los gestos de dibujar en toda esa zona; la del cono es bastante más estrecha, así que ahora
   se puede dibujar cerca del chorro.
@@ -42,8 +43,30 @@ versionado según [SemVer](https://semver.org/lang/es/).
   cambia de contenido sin cambiar de nombre, así que sin bumpearlo el navegador y la CDN siguen
   sirviendo la anterior. Por el camino hubo un sorteo entre varios fondos leyendo `public/` al
   compilar; se quitó antes de publicarse, y el fondo vuelve a estar escrito a pelo en el CSS.
+- **Colocar una fuente de un toque ahora se ve.** Tocar su ficha del dock ya la ponía en el centro
+  de la escena, igual que la bola y la bomba, pero la fuente no tiene cuerpo dibujado y ese centro
+  cae justo debajo del chorro de la de serie: la escena quedaba idéntica antes y después, y el
+  gesto parecía perdido. Ahora la pieza recién soltada sigue enseñando su cono un segundo largo,
+  desvaneciéndose — es la continuación del que ya se veía mientras la llevabas, así que soltarla
+  dejó de ser un corte. Vale para los dos caminos, el toque y el arrastre; tirarla a la papelera no
+  lo dispara.
+- **El talud del montón queda más tendido** (`CREEP_REACH`, en `physics.ts`). Un grano se aparta
+  hacia un escalón si lo tiene a su alcance, y ese alcance —hasta dónde mira— es lo que decide la
+  pendiente en la que el montón deja de tener razones para moverse; estaba clavado en dos celdas.
+  Con cinco, la escena lleva un 11% más de arena en cada instante (135.400 granos a los 6 minutos
+  contra 121.000) y cubre el ancho del lienzo treinta filas más arriba, con la simulación en los
+  mismos 2-3,6 ms. No cambia la forma: el cono sigue siendo un cono, porque la arena llega al
+  vértice más deprisa de lo que el arrastre la reparte.
 
 ### Fixed
+
+- **El tope de arena viva ya no corta el llenado en pantallas grandes.** Era un número absoluto de
+  granos —304.000, que es justo el lienzo entero del portátil donde se midió—, así que en un 4K
+  (más de 400.000 celdas) o en un ultrapanorámico (más de 550.000) dejaba de ser la red de
+  seguridad que pretendía ser y pasaba a ser el tope de verdad: el emisor se cortaba ahí y el
+  drenaje no llegaba a abrir nunca. Ahora es una fracción del lienzo, así que sube sola con la
+  pantalla y con la finura del grano, y deja de ser una de las cosas que había que acordarse de
+  reescalar a mano.
 
 ### Removed
 
@@ -107,6 +130,14 @@ versionado según [SemVer](https://semver.org/lang/es/).
   la tolva salía recortada por arriba y solo asomaba la punta.
 
 ### Fixed
+
+- **El tope de arena viva ya no corta el llenado en pantallas grandes.** Era un número absoluto de
+  granos —304.000, que es justo el lienzo entero del portátil donde se midió—, así que en un 4K
+  (más de 400.000 celdas) o en un ultrapanorámico (más de 550.000) dejaba de ser la red de
+  seguridad que pretendía ser y pasaba a ser el tope de verdad: el emisor se cortaba ahí y el
+  drenaje no llegaba a abrir nunca. Ahora es una fracción del lienzo, así que sube sola con la
+  pantalla y con la finura del grano, y deja de ser una de las cosas que había que acordarse de
+  reescalar a mano.
 
 ### Removed
 

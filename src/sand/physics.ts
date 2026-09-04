@@ -54,6 +54,18 @@ const SIEVE_P = 0.06;
  */
 const CREEP_P = 0.8;
 /**
+ * Hasta que distancia mira el arrastre para encontrar el desnivel, en celdas.
+ *
+ * Es lo que fija el talud de verdad, mas que `CREEP_P`: un grano se aparta si
+ * hay un escalon a su alcance, asi que una ladera con menos pendiente que «una
+ * fila cada CREEP_REACH celdas» ya no le da razones para moverse y ahi se para.
+ * Con el alcance clavado en 2 el monton se asienta a poco menos de 45°, y un
+ * cono de 45° con una sola fuente central toca la boquilla —y la ahoga— cuando
+ * lleva 145.000 granos, la mitad del lienzo: el nivel de disparo del drenaje
+ * no llegaba a alcanzarse nunca.
+ */
+const CREEP_REACH = 5;
+/**
  * Capas de arena por encima de la banda que esta sigue arrastrando.
  *
  * Si solo se mueve la capa que toca la cinta, la banda transporta un grano de
@@ -307,15 +319,22 @@ function slideLateral(g: Grid, x: number, y: number, i: number, dir: number): bo
 function tryCreep(g: Grid, x: number, y: number, i: number, dir: number): boolean {
   const { w, h, mat } = g;
   const nx = x + dir;
-  const fx = x + dir * 2;
-  if (nx < 0 || nx >= w || fx < 0 || fx >= w || y + 1 >= h) return false;
+  if (nx < 0 || nx >= w || y + 1 >= h) return false;
 
   const row = y * w;
   const rowBelow = row + w;
   // Al lado hay piso (si no, la diagonal ya se habría encargado)...
   if (mat[row + nx] !== EMPTY || mat[rowBelow + nx] === EMPTY) return false;
-  // ...y dos celdas más allá hay un escalón hacia abajo.
-  if (mat[row + fx] !== EMPTY || mat[rowBelow + fx] !== EMPTY) return false;
 
-  return slideLateral(g, x, y, i, dir);
+  // ...y en algun punto del alcance hay un escalón hacia abajo. Se recorre la
+  // superficie: en cuanto aparece algo por encima de ella —arena, una pared, el
+  // borde— se acaba la ladera y no hay adonde ir; el escalon es la primera
+  // celda de la fila de abajo que este vacia.
+  for (let d = 2; d <= CREEP_REACH; d++) {
+    const fx = x + dir * d;
+    if (fx < 0 || fx >= w) return false;
+    if (mat[row + fx] !== EMPTY) return false;
+    if (mat[rowBelow + fx] === EMPTY) return slideLateral(g, x, y, i, dir);
+  }
+  return false;
 }

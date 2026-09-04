@@ -167,6 +167,16 @@ export interface Gadget {
    * del punto donde se solto la primera vez.
    */
   onMoved?(): void;
+  /**
+   * La pieza acaba de quedarse donde esta: se ha soltado tras un arrastre o ha
+   * aterrizado de un toque en la ficha del dock.
+   *
+   * Lo necesita la fuente y solo la fuente, porque es la unica que no se ve:
+   * colocarla de un toque dejaba la escena exactamente igual que antes —su
+   * chorro cae dentro del que ya bajaba— y el gesto parecia no haber hecho
+   * nada. Las demas piezas se anuncian solas, apareciendo.
+   */
+  onPlaced?(): void;
 }
 
 /** Cuantas piezas caben en el lienzo a la vez. */
