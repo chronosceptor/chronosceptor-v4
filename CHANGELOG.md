@@ -7,6 +7,18 @@ versionado según [SemVer](https://semver.org/lang/es/).
 
 ### Added
 
+### Changed
+
+### Fixed
+
+### Removed
+
+### Security
+
+## [0.5.0] - 2026-09-04
+
+### Added
+
 - **`?cell=N` cambia el tamaño del grano sin recompilar**, para poder comparar granos en la misma
   sesión. No es solo el tamaño: reescala el perfil entero con él —lo que va por longitud con `k`,
   lo que llena área con `k²`—, porque bajar `cell` a secas no da una versión fina de la escena, da
@@ -73,8 +85,6 @@ versionado según [SemVer](https://semver.org/lang/es/).
 - **El PNG de la fuente, su cargador (`sprites.ts`) y las tres constantes que lo escalaban**
   (`SPOUT_FRAC`, `SOLAPE`, `NOZZLE_SPRITE_ROWS`). Con ellos se va la excepción
   `!public/piezas/*.png` del `.gitignore`: ya no hay ningún dibujo de pieza.
-
-### Security
 
 ## [0.4.0] - 2026-09-02
 
