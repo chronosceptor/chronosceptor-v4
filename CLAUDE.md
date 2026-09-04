@@ -157,6 +157,10 @@ La justificación de fondo de cada decisión de física está en el README, secc
   alfa de la región exterior por inundación desde las cuatro esquinas (cuatro, porque la figura
   suele tocar el borde y parte el exterior en trozos) y respeta el alfa que ya venga hecho. Los
   prompts y el flujo entero están en `docs/prompts-piezas.md`.
+- **El fondo es un solo archivo fijo: `public/background.webp`, escrito a pelo en el CSS de
+  `SandCanvas.astro`.** Hubo un sorteo entre los `backgroundNN.webp` que hubiera en `public/`,
+  leídos con `readdirSync` en el frontmatter; se quitó entero. Soltar un archivo nuevo en
+  `public/` ya no lo mete en la rotación —no hay rotación—: hay que cambiar la `url()`.
 - **Toda capa decorativa va DEBAJO de los canvas**, en la pila de `background` de `#escena`
   (`SandCanvas.astro`), nunca superpuesta. El color de la arena sale de la portada del disco y es lo
   único saturado del cuadro: cualquier velo o trama por encima lo apaga — unas rayas sobre el canvas

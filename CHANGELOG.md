@@ -9,6 +9,12 @@ versionado según [SemVer](https://semver.org/lang/es/).
 
 ### Changed
 
+- **Otra ilustración de fondo.** Misma ruta (`public/background.webp`) y mismo tratamiento —velo y
+  rayas por debajo de los canvas—, imagen distinta. El `?v=` de la `url()` sube a `2`: el archivo
+  cambia de contenido sin cambiar de nombre, así que sin bumpearlo el navegador y la CDN siguen
+  sirviendo la anterior. Por el camino hubo un sorteo entre varios fondos leyendo `public/` al
+  compilar; se quitó antes de publicarse, y el fondo vuelve a estar escrito a pelo en el CSS.
+
 ### Fixed
 
 ### Removed
