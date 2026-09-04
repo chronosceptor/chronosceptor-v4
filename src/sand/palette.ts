@@ -19,6 +19,11 @@ export function packColor(r: number, g: number, b: number): number {
   return ((255 << 24) | (b << 16) | (g << 8) | r) >>> 0;
 }
 
+/** Igual, pero con alfa. Lo usa el agua, que es lo unico que no es opaco. */
+export function packColorA(r: number, g: number, b: number, a: number): number {
+  return ((a << 24) | (b << 16) | (g << 8) | r) >>> 0;
+}
+
 export function unpack(c: number): Rgb {
   return [c & 0xff, (c >> 8) & 0xff, (c >> 16) & 0xff];
 }
@@ -133,6 +138,59 @@ export function grainColor(p: Palette, rand: () => number, dominant = -1, bias =
   const shade = 0.86 + rand() * 0.24;
   return packColor(clamp255(r * shade), clamp255(g * shade), clamp255(b * shade));
 }
+
+/**
+ * Azul de referencia al que tira toda el agua, sea cual sea la paleta.
+ *
+ * El color del agua sale de la paleta —como todo lo demas del cuadro— pero no
+ * puede salir *solo* de ella: el acento de Brasa es un coral, y un lerp suave
+ * hacia el azul deja un agua roja. Pesando la referencia por encima del acento
+ * (`AGUA_MIX`) el agua queda siempre en la mitad fria y conserva un rastro del
+ * tono de su paleta, que es lo que la mantiene dentro del cuadro.
+ */
+const AGUA_REF: Rgb = [18, 50, 74];
+const AGUA_MIX = 0.72;
+/**
+ * Alfa del agua. Es lo unico translucido de la escena.
+ *
+ * El canvas de arena va sobre el fondo de `#escena`, asi que por debajo del
+ * charco se lee la trama del fondo: sin eso el agua queda como una plancha de
+ * plastico opaca, y con eso se lee como liquido sin necesidad de ningun
+ * brillo ni reflejo pintado encima.
+ */
+const AGUA_ALFA = 210;
+
+/**
+ * Una celda de agua concreta.
+ *
+ * El color se guarda ya resuelto en la celda, igual que el de un grano: al
+ * cambiar de paleta el agua que ya estaba conserva su tono y los estratos
+ * siguen contando la historia.
+ *
+ * La variacion de brillo es mucho mas floja que la de la arena (±8% contra
+ * ±12%): el agua es una masa, no granos, y con la variacion de la arena la
+ * superficie del charco sale moteada.
+ */
+export function waterColor(p: Palette, rand: () => number): number {
+  const [r, g, b] = p.colors[p.colors.length - 1] ?? p.colors[0]!;
+  const shade = 0.92 + rand() * 0.16;
+  const mezcla = (c: number, ref: number) => (c + (ref - c) * AGUA_MIX) * shade;
+  return packColorA(
+    clamp255(mezcla(r, AGUA_REF[0])),
+    clamp255(mezcla(g, AGUA_REF[1])),
+    clamp255(mezcla(b, AGUA_REF[2])),
+    AGUA_ALFA,
+  );
+}
+
+/**
+ * Cuanto oscurece la saturacion completa a un grano: 0,35 = se queda en el 65%.
+ *
+ * Es lo que hace que el lodo se vea lodo. Mas oscuro se confunde con el agua
+ * —que anda por 0,26-0,30 de luminancia— y el charco deja de distinguirse del
+ * barro del fondo; menos, y mojar la arena no se nota.
+ */
+export const WET_DARK = 0.35;
 
 /** Promedio de una lista de colores empaquetados. Alimenta el medidor de la cuenca. */
 export function averagePacked(colors: number[]): Rgb {

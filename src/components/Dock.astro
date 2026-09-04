@@ -77,9 +77,33 @@ const INICIAL = PALETTES[0]!;
     }
   </div>
 
-  {/* El separador y el boton de color van fuera de #dock-fichas: no se
-      arrastran, y el tope de piezas no debe apagarlos. */}
+  {/* El separador, el interruptor de material y el boton de color van fuera de
+      #dock-fichas: no se arrastran, y el tope de piezas no debe apagarlos.
+      Dentro se habrian apagado con el lienzo lleno, que es justo cuando mas
+      falta hace poder cambiar de material o de color. */}
   <div id="dock-sep" aria-hidden="true"></div>
+
+  {/* Que cae de las fuentes. Un solo boton con dos estados y no dos fichas: es
+      un interruptor de la escena entera, no una pieza que se coloque. El icono
+      que se ve es el del material que esta cayendo AHORA, no el que se
+      obtendria al pulsar — un boton que ensena lo que va a pasar en vez de lo
+      que pasa deja de poder leerse como indicador. */}
+  <button type="button" id="dock-material" title="Cae arena" aria-label="Cae arena" aria-pressed="false">
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      {/* Arena: tres granos sueltos cayendo, del mismo relleno macizo que el
+          chorro de la ficha de la fuente. */}
+      <g class="mat-arena" fill="currentColor" stroke="none">
+        <circle cx="8.4" cy="7.4" r="1.5" />
+        <circle cx="14.6" cy="11" r="1.5" />
+        <circle cx="9.6" cy="15.4" r="1.5" />
+        <circle cx="15.2" cy="17.4" r="1.5" />
+      </g>
+      {/* Agua: una gota, a trazo, del grosor de las demas piezas huecas. */}
+      <g class="mat-agua">
+        <path d="M12 4.2c3.4 4 5.4 6.7 5.4 9.4a5.4 5.4 0 0 1-10.8 0c0-2.7 2-5.4 5.4-9.4z" />
+      </g>
+    </svg>
+  </button>
 
   <button
     type="button"
@@ -224,6 +248,51 @@ const INICIAL = PALETTES[0]!;
 
   /* El disco lleva el mismo filete de un pixel que todo lo demas: sin el, sobre
      el fondo translucido del dock la muestra flota sin borde. */
+  /* Mismo boton que el de color: 44x44, redondo y del gris de las fichas. */
+  #dock-material {
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: #8a8a97;
+    cursor: pointer;
+    transition: background 140ms ease, color 140ms ease;
+  }
+
+  #dock-material svg {
+    width: 24px;
+    height: 24px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.15;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  #dock-material:hover,
+  #dock-material:focus-visible {
+    color: #d6d6e0;
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  /* Solo se ve el material que esta cayendo. El estado lo lleva aria-pressed,
+     asi que el CSS y el lector de pantalla dicen lo mismo sin duplicar nada. */
+  #dock-material .mat-agua {
+    display: none;
+  }
+
+  #dock-material[aria-pressed='true'] .mat-arena {
+    display: none;
+  }
+
+  #dock-material[aria-pressed='true'] .mat-agua {
+    display: inline;
+  }
+
   #dock-color-disco,
   .muestra {
     border-radius: 999px;
@@ -318,6 +387,7 @@ const INICIAL = PALETTES[0]!;
   }
 
   #dock.papelera #dock-fichas,
+  #dock.papelera #dock-material,
   #dock.papelera #dock-sep,
   #dock.papelera #dock-color,
   #dock.papelera #dock-paletas {

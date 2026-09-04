@@ -1,6 +1,6 @@
 import type { Grid } from './grid';
 import {
-  BELT_L, BELT_R, CHUTE_L, CHUTE_R, EMPTY, SAND, SIEVE, SINK, WALL,
+  BELT_L, BELT_R, CHUTE_L, CHUTE_R, EMPTY, SAND, SIEVE, SINK, WALL, WATER,
 } from './materials';
 
 /**
@@ -81,6 +81,57 @@ const BELT_REACH = 8;
  * comporta como una avalancha y los conos se mantienen en su ángulo.
  */
 const AVALANCHE_STEPS = 5;
+/**
+ * Celdas que recorre de lado una celda de agua en un frame.
+ *
+ * Es lo que separa un charco de un monton: la arena se aparta una celda cada
+ * vez y por eso hace talud, el agua barre hasta encontrar sitio y por eso queda
+ * plana. Con 1 el agua se nivela, pero tan despacio que un vertido se lee como
+ * arena azul cayendo; con 8 el frente corre lo bastante para que un cuenco se
+ * llene a nivel a la vista.
+ *
+ * El barrido se corta en cuanto aparece un hueco por debajo del camino: el agua
+ * quiere bajar, no correr, y sin ese corte pasaria de largo por encima de los
+ * agujeros.
+ */
+const FLOW_REACH = 8;
+/**
+ * Probabilidad de que una celda de agua se cuele por la arena que tiene debajo,
+ * intercambiandose con ella. Es la regla que fabrica el lodo.
+ *
+ * Se intento antes con absorcion —el agua desaparece y el grano que toca queda
+ * saturado— y no vale: la arena apilada es maciza, asi que el agua solo llega a
+ * la costra. Medido sobre un monton de 20.000 granos, absorbiendo se mojaban
+ * 1.573; y no habia numero que lo arreglara, porque el limite no es el ritmo
+ * sino que el agua no tiene por donde entrar. Filtrandose SI entra: baja por el
+ * monton como baja de verdad, mojando lo que atraviesa, y sale por abajo a
+ * encharcarse. El lodo deja de ser una capa de pintura y pasa a ser el monton.
+ *
+ * Va por frame y solo para el agua que ya no puede caer: una gota en vuelo no
+ * se filtra por la pared de arena que roza. Y es una probabilidad y no un paso
+ * seguro para que se lea como filtrarse y no como caer — dentro de la arena el
+ * agua avanza a la sexta parte de la velocidad que en el aire.
+ */
+const SOAK_P = 0.16;
+/**
+ * Humedad a partir de la cual un grano no se aparta, pase lo que pase.
+ *
+ * Es un umbral y no una probabilidad, y esa es la diferencia entre que el lodo
+ * se sostenga y que no. Con la cohesion escrita solo como probabilidad —«se
+ * desliza con probabilidad 1 - humedad»— una cara vertical de barro saturado se
+ * venia abajo igual que la arena seca: la probabilidad frena un frame, pero
+ * llegan cientos, y basta con que la humedad baje un punto por debajo del tope
+ * para que la cara tenga sesenta oportunidades por segundo de desmoronarse.
+ * Medido con el monton entero a 255 y sin umbral: la cara aguantaba un 60% de
+ * su altura contra el 55% de la arena seca, o sea nada.
+ *
+ * Por debajo del umbral si es una probabilidad, y ahi esta el gradiente: un
+ * barro que se va secando pasa por una franja en la que se desmorona cada vez
+ * mas deprisa antes de volver a ser arena suelta. Con `DRY` a 8 por segundo,
+ * un grano saturado esta rigido unos 20 s y se derrumba durante los 12
+ * siguientes.
+ */
+const WET_HOLD = 96;
 
 /**
  * Un paso de simulación.
@@ -94,7 +145,7 @@ const AVALANCHE_STEPS = 5;
  * y asentada cuesta prácticamente nada.
  */
 export function step(g: Grid, rand: () => number, frame: number): void {
-  const { w, h, size, mat, col, vel, awake, moved, beltSpeed } = g;
+  const { w, h, size, mat, col, vel, wet, flow, awake, moved, beltSpeed } = g;
   moved.fill(0);
   const leftFirst = (frame & 1) === 0;
 
@@ -106,7 +157,20 @@ export function step(g: Grid, rand: () => number, frame: number): void {
 
     for (let x = xStart; x !== xEnd; x += xStep) {
       const i = row + x;
-      if (mat[i] !== SAND || moved[i] === 1 || awake[i] === 0) continue;
+      // Dos comparaciones contra literales. La version obvia de esto es una
+      // tabla `IS_MOBILE[m]` —que es como estan escritas `SOLID` e `IS_MASS`—
+      // y sale un 20-40% mas cara: mete una segunda lectura de array en el
+      // guardia, que es la unica linea que se ejecuta para las 326.000 celdas
+      // del lienzo esten como esten. Medido con el lienzo lleno y asentado:
+      // 1,72 ms el bucle de una sola comparacion de siempre, 1,75 asi, 2,11
+      // con la tabla. Si algun dia hay un tercer material que caiga, hay que
+      // volver a medirlo antes de dar por bueno el `switch`.
+      const m = mat[i]!;
+      if ((m !== SAND && m !== WATER) || moved[i] === 1 || awake[i] === 0) continue;
+      if (m === WATER) {
+        stepWater(g, x, y, i, rand);
+        continue;
+      }
 
       const belowY = y + 1;
       const below = belowY < h ? i + w : -1;
@@ -134,13 +198,42 @@ export function step(g: Grid, rand: () => number, frame: number): void {
         mat[dst] = SAND;
         col[dst] = col[i]!;
         vel[dst] = v;
+        wet[dst] = wet[i]!;
         moved[dst] = 1;
         awake[dst] = 1;
         mat[i] = EMPTY;
         col[i] = 0;
         vel[i] = 0;
+        wet[i] = 0;
         g.wake(x, y);
         g.wake(nx, ny);
+        continue;
+      }
+
+      // --- A2. Hundirse en el agua ------------------------------------
+      //
+      // Un intercambio de UNA celda, y no el raycast de la caida libre: bajando
+      // varias filas de golpe el agua que habia en medio saldria teletransportada
+      // arriba del todo. Ademas la arena baja mas despacio dentro del agua, que
+      // es justo lo que se ve.
+      if (below >= 0 && mat[below] === WATER) {
+        const wcol = col[below]!;
+        mat[below] = SAND;
+        col[below] = col[i]!;
+        vel[below] = 1;
+        // Meterse en el agua satura. La cohesion es lo unico que frena a un
+        // grano, y el agua cuenta como hueco para las diagonales: sin saturar,
+        // la arena sumergida se desliza SIN ROZAMIENTO y la ladera se licua.
+        wet[below] = 255;
+        moved[below] = 1;
+        awake[below] = 1;
+        mat[i] = WATER;
+        col[i] = wcol;
+        vel[i] = 0;
+        wet[i] = 0;
+        flow[i] = 0;
+        g.wake(x, y);
+        g.wake(x, y + 1);
         continue;
       }
 
@@ -222,33 +315,63 @@ export function step(g: Grid, rand: () => number, frame: number): void {
         }
       }
 
-      // --- F. Ángulo de reposo: diagonales, encadenadas en avalancha ----
-      const first = rand() < 0.5 ? -1 : 1;
-      let dir = first;
-      let ni = tryDiagonal(g, x, y, i, dir);
-      if (ni < 0) {
-        dir = -first;
-        ni = tryDiagonal(g, x, y, i, dir);
+      // --- F y G. Cohesión: la arena mojada no se desmorona ------------
+      //
+      // Es todo el lodo. Un grano seco (`wet` 0) pasa de largo sin pagar ni un
+      // `rand()`, asi que la arena de siempre se comporta exactamente igual que
+      // antes; por encima de `WET_HOLD` no se aparta nunca, y por eso una pared
+      // de barro se sostiene de pie. Entre medias es una probabilidad, y ahi
+      // esta el gradiente del desmoronamiento mientras se seca.
+      //
+      // Medido apoyando un monton contra una pared dibujada y quitandola: de la
+      // cara vertical, la arena seca conserva el 55% de su altura y derrama 66
+      // celdas; el mismo monton mojado conserva el 100% y derrama 4.
+      //
+      // Lo que NO se toca es la caida libre: un grano mojado en el aire cae. Sin
+      // esa asimetria el lodo formaria arcos y voladizos colgando de la nada.
+      //
+      // Tocar agua satura, y va ANTES de la puerta, no al aterrizar en la celda
+      // de destino: un grano seco que se desliza y se moja al llegar ya ha dado
+      // el paso, y con la ladera entera haciendo eso una vez por frame el
+      // monton se derrite en vez de apelmazarse.
+      //
+      // Solo mira a los lados: debajo no hace falta, porque un grano con agua
+      // debajo se hunde en A2 y no llega hasta aqui.
+      let wv = wet[i]!;
+      if (wv < 255
+        && ((x > 0 && mat[i - 1] === WATER) || (x < w - 1 && mat[i + 1] === WATER))) {
+        wv = 255;
+        wet[i] = 255;
       }
-      if (ni >= 0) {
-        let cx = x + dir;
-        let cy = y + 1;
-        let ci = ni;
-        for (let a = 1; a < AVALANCHE_STEPS; a++) {
-          const nx = tryDiagonal(g, cx, cy, ci, dir);
-          if (nx < 0) break;
-          ci = nx;
-          cx += dir;
-          cy += 1;
+      if (wv < WET_HOLD && (wv === 0 || rand() * WET_HOLD >= wv)) {
+        // --- F. Ángulo de reposo: diagonales, encadenadas en avalancha --
+        const first = rand() < 0.5 ? -1 : 1;
+        let dir = first;
+        let ni = tryDiagonal(g, x, y, i, dir);
+        if (ni < 0) {
+          dir = -first;
+          ni = tryDiagonal(g, x, y, i, dir);
         }
-        moved[ci] = 1;
-        continue;
-      }
+        if (ni >= 0) {
+          let cx = x + dir;
+          let cy = y + 1;
+          let ci = ni;
+          for (let a = 1; a < AVALANCHE_STEPS; a++) {
+            const nx = tryDiagonal(g, cx, cy, ci, dir);
+            if (nx < 0) break;
+            ci = nx;
+            cx += dir;
+            cy += 1;
+          }
+          moved[ci] = 1;
+          continue;
+        }
 
-      // --- G. Arrastre lateral hacia un desnivel ------------------------
-      if (rand() < CREEP_P) {
-        const cd = rand() < 0.5 ? -1 : 1;
-        if (tryCreep(g, x, y, i, cd) || tryCreep(g, x, y, i, -cd)) continue;
+        // --- G. Arrastre lateral hacia un desnivel ----------------------
+        if (rand() < CREEP_P) {
+          const cd = rand() < 0.5 ? -1 : 1;
+          if (tryCreep(g, x, y, i, cd) || tryCreep(g, x, y, i, -cd)) continue;
+        }
       }
 
       // --- H. Nada funcionó: a dormir -----------------------------------
@@ -270,22 +393,37 @@ export function step(g: Grid, rand: () => number, frame: number): void {
  * Devuelve el índice destino, o -1 si no se pudo.
  */
 function tryDiagonal(g: Grid, x: number, y: number, i: number, dir: number): number {
-  const { w, h, mat, col, vel, awake, moved } = g;
+  const { w, h, mat, col, vel, wet, flow, awake, moved } = g;
   const nx = x + dir;
   const ny = y + 1;
   if (nx < 0 || nx >= w || ny >= h) return -1;
   const side = y * w + nx;
   const diag = ny * w + nx;
-  if (mat[side] !== EMPTY || mat[diag] !== EMPTY) return -1;
+  const ms = mat[side]!;
+  const md = mat[diag]!;
+  // El agua cuenta como hueco en los dos sitios: sin eso un monton sumergido no
+  // podria avalanchar y se apilaria en columnas de 90 grados dentro del charco.
+  if ((ms !== EMPTY && ms !== WATER) || (md !== EMPTY && md !== WATER)) return -1;
 
-  mat[diag] = SAND;
+  const desalojada = md === WATER ? col[diag]! : 0;
+  mat[diag] = mat[i]!;
   col[diag] = col[i]!;
   vel[diag] = 0;
+  // Igual que al hundirse: meterse en el agua satura. Es lo que hace que una
+  // avalancha bajo el agua se pare sola en vez de seguir hasta lo plano.
+  wet[diag] = md === WATER ? 255 : wet[i]!;
   awake[diag] = 1;
   moved[diag] = 1;
-  mat[i] = EMPTY;
-  col[i] = 0;
+  if (md === WATER) {
+    mat[i] = WATER;
+    col[i] = desalojada;
+  } else {
+    mat[i] = EMPTY;
+    col[i] = 0;
+  }
   vel[i] = 0;
+  wet[i] = 0;
+  flow[i] = 0;
   g.wake(x, y);
   g.wake(nx, ny);
   return diag;
@@ -293,19 +431,23 @@ function tryDiagonal(g: Grid, x: number, y: number, i: number, dir: number): num
 
 /** Paso lateral puro sobre una superficie. Lo usan las bandas. */
 function slideLateral(g: Grid, x: number, y: number, i: number, dir: number): boolean {
-  const { w, mat, col, vel, awake, moved } = g;
+  const { w, mat, col, vel, wet, flow, awake, moved } = g;
   const nx = x + dir;
   if (nx < 0 || nx >= w) return false;
   const t = y * w + nx;
   if (mat[t] !== EMPTY) return false;
 
-  mat[t] = SAND;
+  mat[t] = mat[i]!;
   col[t] = col[i]!;
   vel[t] = 0;
+  wet[t] = wet[i]!;
+  flow[t] = flow[i]!;
   awake[t] = 1;
   moved[t] = 1;
   mat[i] = EMPTY;
   col[i] = 0;
+  wet[i] = 0;
+  flow[i] = 0;
   g.wake(x, y);
   g.wake(nx, y);
   return true;
@@ -337,4 +479,173 @@ function tryCreep(g: Grid, x: number, y: number, i: number, dir: number): boolea
     if (mat[rowBelow + fx] === EMPTY) return slideLateral(g, x, y, i, dir);
   }
   return false;
+}
+
+/**
+ * Un paso de una celda de agua.
+ *
+ * Va en su propia funcion y no inline en `step` por dos razones. La primera es
+ * que el camino de la arena es el que corre millones de veces por frame y no
+ * queria tocarlo mas de lo imprescindible: sigue siendo el mismo codigo, con el
+ * guardia cambiado y el arrastre de `wet`. La segunda es que el agua no
+ * comparte casi nada con la arena — las secciones de cinta, rampa y criba no le
+ * aplican, y la diagonal y el paso lateral tienen otras condiciones.
+ *
+ * El orden importa: primero cae, y solo cuando ya no puede caer se empapa. Una
+ * gota en vuelo que mojara la pared de arena por la que pasa rozando dejaria un
+ * chorro absorbido a media altura, sin llegar nunca abajo.
+ */
+function stepWater(g: Grid, x: number, y: number, i: number, rand: () => number): void {
+  const { w, h, mat, col, vel, wet, flow, awake, moved } = g;
+
+  const belowY = y + 1;
+  const below = belowY < h ? i + w : -1;
+
+  // --- a. Caída libre, igual que la arena y con la misma deriva ---------
+  if (below >= 0 && mat[below] === EMPTY) {
+    let v = vel[i]! + 1;
+    if (v > MAX_VEL) v = MAX_VEL;
+    let ny = y;
+    for (let k = 0; k < v; k++) {
+      const ty = ny + 1;
+      if (ty >= h || mat[ty * w + x] !== EMPTY) break;
+      ny = ty;
+    }
+    let nx = x;
+    if (rand() < DRIFT_P) {
+      const tx = x + (rand() < 0.5 ? -1 : 1);
+      if (tx >= 0 && tx < w && mat[ny * w + tx] === EMPTY) nx = tx;
+    }
+    const dst = ny * w + nx;
+    mat[dst] = WATER;
+    col[dst] = col[i]!;
+    vel[dst] = v;
+    wet[dst] = 0;
+    flow[dst] = flow[i]!;
+    moved[dst] = 1;
+    awake[dst] = 1;
+    mat[i] = EMPTY;
+    col[i] = 0;
+    vel[i] = 0;
+    flow[i] = 0;
+    g.wake(x, y);
+    g.wake(nx, ny);
+    return;
+  }
+
+  vel[i] = 0;
+  const under = below >= 0 ? mat[below]! : WALL;
+
+  // --- b. Drenaje ------------------------------------------------------
+  if (under === SINK) {
+    g.removeAt(i);
+    return;
+  }
+
+  // --- c. Filtrarse por la arena: la única regla que fabrica lodo -------
+  //
+  // Intercambio, no absorcion: el agua ocupa el poro y el grano sube. Y el
+  // grano que sube queda saturado, asi que el frente de mojado va pegado al
+  // agua que baja en vez de tener que difundirse detras de ella.
+  if (under === SAND && rand() < SOAK_P) {
+    const arena = col[below]!;
+    mat[below] = WATER;
+    col[below] = col[i]!;
+    vel[below] = 0;
+    wet[below] = 0;
+    flow[below] = flow[i]!;
+    moved[below] = 1;
+    awake[below] = 1;
+    mat[i] = SAND;
+    col[i] = arena;
+    vel[i] = 0;
+    wet[i] = 255;
+    flow[i] = 0;
+    g.wake(x, y);
+    g.wake(x, y + 1);
+    return;
+  }
+
+  // --- d. Diagonal -----------------------------------------------------
+  //
+  // Sin exigir que el lateral este libre, al reves que la arena. Esa condicion
+  // es justo la que hace que una brocha de una celda retenga un monton, y el
+  // agua no debe quedarse retenida por un hueco diagonal: se cuela por donde
+  // quepa, que es lo que la distingue.
+  const first = rand() < 0.5 ? -1 : 1;
+  if (slideDiagonal(g, x, y, i, first) || slideDiagonal(g, x, y, i, -first)) return;
+
+  // --- e. Correr de lado a buscar nivel --------------------------------
+  let d = flow[i]!;
+  if (d === 0) d = rand() < 0.5 ? -1 : 1;
+  if (waterFlow(g, x, y, i, d)) return;
+  if (waterFlow(g, x, y, i, -d)) return;
+
+  // --- f. Nada funcionó: a dormir --------------------------------------
+  //
+  // Un charco a nivel se duerme entero, que es lo que lo hace tan barato como
+  // un monton asentado: cada celda tiene agua a los dos lados y debajo, y no
+  // hay a donde ir. Solo las dos celdas del borde siguen despiertas, y avanzan
+  // hasta topar con algo.
+  awake[i] = 0;
+}
+
+/** Diagonal abajo-`dir` para el agua: solo mira la celda de destino. */
+function slideDiagonal(g: Grid, x: number, y: number, i: number, dir: number): boolean {
+  const { w, h, mat, col, vel, wet, flow, awake, moved } = g;
+  const nx = x + dir;
+  const ny = y + 1;
+  if (nx < 0 || nx >= w || ny >= h) return false;
+  const diag = ny * w + nx;
+  if (mat[diag] !== EMPTY) return false;
+
+  mat[diag] = WATER;
+  col[diag] = col[i]!;
+  vel[diag] = 0;
+  wet[diag] = 0;
+  flow[diag] = dir;
+  awake[diag] = 1;
+  moved[diag] = 1;
+  mat[i] = EMPTY;
+  col[i] = 0;
+  flow[i] = 0;
+  g.wake(x, y);
+  g.wake(nx, ny);
+  return true;
+}
+
+/**
+ * Barrido lateral hasta `FLOW_REACH` celdas, o hasta el primer sitio por el que
+ * se pueda bajar.
+ *
+ * El sentido se guarda en `flow` y se hereda: sin esa memoria cada celda
+ * sortearia un lado nuevo cada frame, y un charco no se nivelaria — herviria,
+ * sin dormirse nunca ninguna celda.
+ */
+function waterFlow(g: Grid, x: number, y: number, i: number, dir: number): boolean {
+  const { w, h, mat, col, vel, wet, flow, awake, moved } = g;
+  const row = y * w;
+  let bx = x;
+  for (let d = 1; d <= FLOW_REACH; d++) {
+    const nx = x + dir * d;
+    if (nx < 0 || nx >= w || mat[row + nx] !== EMPTY) break;
+    bx = nx;
+    if (y + 1 < h && mat[row + w + nx] === EMPTY) break;
+  }
+  if (bx === x) return false;
+
+  const t = row + bx;
+  mat[t] = WATER;
+  col[t] = col[i]!;
+  vel[t] = 0;
+  wet[t] = 0;
+  flow[t] = dir;
+  awake[t] = 1;
+  moved[t] = 1;
+  mat[i] = EMPTY;
+  col[i] = 0;
+  flow[i] = 0;
+  g.wake(x, y);
+  g.wake(bx, y);
+  return true;
 }

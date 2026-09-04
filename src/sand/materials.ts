@@ -25,8 +25,18 @@ export const SINK = 10;
  * como una linea fina de verdad y no como una barra del grosor de una celda.
  */
 export const LEDGE = 11;
+/**
+ * Agua. El segundo material que cae, y el unico ademas de la arena que despacha
+ * el automata.
+ *
+ * No es `SOLID` a proposito: la arena tiene que poder hundirse a traves de un
+ * charco intercambiando celdas con el. Si el agua bloqueara, lo primero que
+ * hace cualquiera —echar arena en el agua— dejaria la arena flotando encima y
+ * se leeria como un fallo.
+ */
+export const WATER = 12;
 
-export const MATERIAL_COUNT = 12;
+export const MATERIAL_COUNT = 13;
 
 /**
  * Tabla de solidez indexada por material: 1 = bloquea el paso de la arena.

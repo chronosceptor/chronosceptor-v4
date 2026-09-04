@@ -1,13 +1,18 @@
 import { createWorld, clearWorld, isDrawable, transferDrawing, type World } from './world';
 import { hasWallNear, paintStroke, type Point } from './draw';
 import { step } from './physics';
+import { moisture } from './moisture';
 import { Renderer, type DrawCtx } from './render';
 import { Input } from './input';
+import { SAND, WATER } from './materials';
 import { DEFAULT_PALETTE, THEME, type Palette } from './palette';
 import { mulberry32 } from './rng';
 import { Ejecta } from './ejecta';
 import { createGadget, GadgetLayer, type Gadget, type GadgetKind } from './gadgets';
 import { Emitter } from './gadgets/emitter';
+
+/** Lo que siembran las fuentes. Lo elige el boton del dock. */
+export type EmitMaterial = 'sand' | 'water';
 
 export interface BootOptions {
   sandCanvas: HTMLCanvasElement;
@@ -55,11 +60,19 @@ export interface SandApp {
   destroy(): void;
   /** Cambia la paleta con una pausa de "cambio de turno" de por medio. */
   setPalette(p: Palette): void;
+  /**
+   * Cambia lo que siembran TODAS las fuentes, desde el fotograma siguiente.
+   * No repinta nada de lo ya caido: el charco sigue siendo charco.
+   */
+  setEmitMaterial(m: EmitMaterial): void;
+  readonly emitMaterial: EmitMaterial;
   /** Vacia el lienzo. */
   clear(): void;
   readonly palette: Palette;
   inspect(): {
     sand: number;
+    agua: number;
+    mojada: number;
     walls: number;
     fps: number;
     grid: string;
@@ -94,6 +107,14 @@ export function boot(opts: BootOptions): SandApp {
   const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 
   let palette: Palette = DEFAULT_PALETTE;
+  /**
+   * Que siembran las fuentes. Global y no por fuente: es un interruptor de la
+   * escena, como la paleta, no una propiedad de cada pieza.
+   *
+   * No persiste en `localStorage` — al reves que la paleta. La paleta es una
+   * preferencia; arrancar en agua sin haberlo pedido se leeria como un fallo.
+   */
+  let emitMaterial: EmitMaterial = 'sand';
 
   let world!: World;
   let renderer!: Renderer;
@@ -391,13 +412,18 @@ export function boot(opts: BootOptions): SandApp {
     const { grid, source, drain, profile } = world;
     drain.tick(grid, source.blocked);
 
-    const headroom = (): number => Math.max(0, profile.maxSand - grid.sandCount);
+    const headroom = (): number => Math.max(0, profile.maxSand - grid.ocupadas);
 
-    gadgets.tick({ grid, ejecta, palette, rand, budget: headroom() }, dt);
+    const material = emitMaterial === 'water' ? WATER : SAND;
+    gadgets.tick({ grid, ejecta, palette, material, rand, budget: headroom() }, dt);
     // Una pieza puede haberse consumido sola (la bomba al estallar).
     if (gadgets.count !== announced) announce();
 
     ejecta.step(grid, dt);
+    // El filtrado y el secado van ANTES del automata: la humedad que cambia
+    // despierta celdas, y asi el monton que acaba de secarse se desmorona en
+    // este mismo paso en vez de esperar al siguiente.
+    moisture(grid, frame);
     step(grid, rand, frame++);
   }
 
@@ -500,12 +526,21 @@ export function boot(opts: BootOptions): SandApp {
     return n;
   }
 
+  /** Celdas con algo de humedad. Un solo recorrido, y solo en modo depuracion. */
+  function countWet(): number {
+    const { wet, size } = world.grid;
+    let n = 0;
+    for (let i = 0; i < size; i++) if (wet[i]! > 0) n++;
+    return n;
+  }
+
   function drawDebug(ctx: CanvasRenderingContext2D): void {
     const { grid, profile } = world;
     const lines = [
       `${profile.name}  ${grid.w}x${grid.h}  celda ${profile.cell}px`,
       `fps ${fps.toFixed(0)}  sim ${SIM_HZ / simDivider}Hz`,
-      `arena ${grid.sandCount}  paredes ${countWalls()}`,
+      `arena ${grid.sandCount}  agua ${grid.waterCount}  paredes ${countWalls()}`,
+      `mojada ${countWet()}  siembra ${emitMaterial}`,
       `sim ${msSim.toFixed(1)}ms  pintado ${msRender.toFixed(1)}ms`,
       `brocha ${profile.brush}  modo ${input?.mode ?? '-'}`,
       `piezas ${gadgets.count}  ejecta ${ejecta.count}  perdidos ${ejecta.lost}`,
@@ -600,6 +635,12 @@ export function boot(opts: BootOptions): SandApp {
       // Los granos ya asentados conservan la suya, que es lo que estratifica.
       world.source.newBatch();
     },
+    setEmitMaterial(m: EmitMaterial): void {
+      emitMaterial = m;
+    },
+    get emitMaterial(): EmitMaterial {
+      return emitMaterial;
+    },
     clear(): void {
       gadgets.clearAll(world.grid);
       // La fuente de serie vuelve, en el sitio donde estuviera: se puede volar
@@ -625,6 +666,10 @@ export function boot(opts: BootOptions): SandApp {
       // que apuntar, y aparecer en la esquina superior izquierda seria un
       // parpadeo en un sitio que no significa nada.
       ghost = createGadget(kind, -1000, -1000, { gridW: world.grid.w, k: world.profile.k });
+      // El fantasma de una fuente ensena el contorno de su chorro, y ese
+      // contorno depende del material: sin esto prometeria un cono de arena
+      // mientras esta cayendo agua.
+      if (ghost instanceof Emitter) ghost.setMaterial(emitMaterial === 'water' ? WATER : SAND);
       // El fantasma se lleva en la mano igual que una pieza ya colocada, y hay
       // piezas a las que eso les cambia el dibujo: la fuente no se ve, asi que
       // solo mientras la llevas ensena el cono por donde va a salir la arena.
@@ -687,11 +732,19 @@ export function boot(opts: BootOptions): SandApp {
       return palette;
     },
     inspect() {
-      const { awake, size } = world.grid;
+      const { awake, wet, size } = world.grid;
       let despiertas = 0;
-      for (let i = 0; i < size; i++) despiertas += awake[i]!;
+      let mojada = 0;
+      for (let i = 0; i < size; i++) {
+        despiertas += awake[i]!;
+        if (wet[i]! > 0) mojada++;
+      }
       return {
         sand: world.grid.sandCount,
+        agua: world.grid.waterCount,
+        // Granos con algo de humedad. Es el tamano del lodo: sube al mojar y
+        // vuelve a cero solo cuando se ha secado del todo.
+        mojada,
         walls: countWalls(),
         fps: Math.round(fps),
         grid: `${world.grid.w}x${world.grid.h}`,
@@ -710,12 +763,20 @@ export function boot(opts: BootOptions): SandApp {
     },
     dump(x0: number, y0: number, w: number, h: number): string[] {
       const { grid } = world;
-      const glyph = ['.', 'o', '#', '<', '>', '\\', '/', ':', '=', '@', 'v', '_'];
+      const glyph = ['.', 'o', '#', '<', '>', '\\', '/', ':', '=', '@', 'v', '_', '~'];
       const lines: string[] = [];
       for (let y = y0; y < y0 + h && y < grid.h; y++) {
         let line = String(y).padStart(4) + ' ';
         for (let x = x0; x < x0 + w && x < grid.w; x++) {
-          line += glyph[grid.mat[y * grid.w + x]!] ?? '?';
+          const i = y * grid.w + x;
+          // La arena mojada sale en mayuscula. Sin eso no hay forma de ver por
+          // donde va el frente de mojado, y es lo primero que hace falta mirar
+          // cuando el lodo no se comporta.
+          if (grid.mat[i] === SAND && grid.wet[i]! > 0) {
+            line += 'O';
+            continue;
+          }
+          line += glyph[grid.mat[i]!] ?? '?';
         }
         lines.push(line);
       }

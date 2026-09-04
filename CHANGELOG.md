@@ -7,7 +7,50 @@ versionado según [SemVer](https://semver.org/lang/es/).
 
 ### Added
 
+- **Agua**, el segundo material que cae. Cae con la misma velocidad y la misma deriva que la arena,
+  pero al posarse busca nivel en vez de hacer talud: corre de lado hasta ocho celdas por fotograma
+  en la dirección que recuerda, y esa memoria de dirección no es un adorno — sin ella un charco no
+  se nivela, hierve, y no se duerme ni una celda. Se atrapa con el lápiz igual que la arena, pero
+  con su física: no la retiene un hueco diagonal, así que un cuenco con un agujero de una celda se
+  vacía. Medido: 88.500 celdas sueltas en el lienzo se asientan en una superficie de 308 a 317
+  contra un nivel ideal de 314.
+- **Lodo, que no es un material sino un byte de humedad en la arena** (`Grid.wet`). El agua se
+  filtra por el montón intercambiándose con los granos y moja lo que atraviesa; la arena mojada se
+  apelmaza y aguanta paredes verticales que la arena seca no aguanta. Medido apoyando un montón
+  contra una pared dibujada y quitándola: la arena seca conserva el 55% de la cara vertical y
+  derrama 66 celdas, la mojada conserva el 100% y derrama 4. Se seca sola en unos 30 segundos,
+  pasando por una franja en la que se va desmoronando cada vez más deprisa hasta volver a ser arena
+  suelta. El secado vive en `moisture.ts`, un barrido amortizado que recorre la rejilla entera una
+  vez por segundo: es el único sitio del proyecto que toca celdas dormidas, porque si el secado
+  viviera en el autómata un montón de lodo se dormiría entero y no volvería a secarse jamás.
+- **Un interruptor en el dock, junto al del color, para cambiar entre arena y agua.** Afecta a todas
+  las fuentes a la vez y entra en el fotograma siguiente, sin repintar nada de lo ya caído — igual
+  que la paleta, y por la misma razón: lo que se ve en el lienzo es historia y no estado. No se
+  guarda entre visitas; abrir la página y que caiga agua sin haberlo pedido se leería como un fallo.
+- **`inspect()` trae `agua` y `mojada`**, y `dump()` saca `~` para el agua y la arena mojada en
+  mayúscula. Sin esa mayúscula no hay forma de ver por dónde va el frente de mojado, que es lo
+  primero que hace falta mirar cuando el lodo no se comporta.
+
 ### Changed
+
+- **El chorro de agua no sale en cono.** El cono largo funciona con la arena porque los granos van
+  sueltos y lo que se ve es una nube abriéndose; el agua va pegada y ese mismo cono se lee como un
+  triángulo macizo colgando de un punto — una forma, no un flujo. Ahora el agua se abre en la octava
+  parte de las filas y **solo se siembra en esa boca**: lo de más abajo es agua que cae, con su
+  densidad de caída, así que el chorro no tiene borde. La boca va la mitad más ancha que la de la
+  arena, y eso es caudal y no gusto: con el semiancho de la arena salían 830 celdas/s y con el
+  ensanche 1.097, contra las 1.509 de la arena.
+- **El drenaje y el tope de celdas cuentan la suma de arena y agua** (`Grid.ocupadas`). Contando
+  solo arena, un chorro de agua llenaría el lienzo sin que nada lo frenara.
+- **La bola se come también el agua.** Mirando solo la arena dejaba dentro de sí misma un disco de
+  agua intacto, flotando y visible a través de ella.
+- **El guardia del bucle caliente son dos comparaciones contra literales.** Lo natural al añadir un
+  segundo material móvil era una tabla `IS_MOBILE[m]`, con `SOLID` e `IS_MASS` de precedente, y sale
+  entre un 20 y un 40% más caro: mete una segunda lectura de array en la única línea que se ejecuta
+  para las 326.000 celdas del lienzo estén como estén. Medido con el lienzo lleno y asentado: 1,72
+  ms el bucle de una sola comparación de siempre, 1,75 con las dos comparaciones, 2,11 con la tabla.
+  Lo mismo en el bucle de pintado: 0,36 / 0,54 / 0,76 ms. El caso peor de toda la función es un
+  lienzo entero de lodo secándose, que sube la simulación a 4,2 ms de los 16,7 de presupuesto.
 
 ### Fixed
 

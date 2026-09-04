@@ -1,5 +1,5 @@
 import type { Grid } from '../grid';
-import { SAND, WALL } from '../materials';
+import { SAND, WALL, WATER } from '../materials';
 import type { Rgb } from '../palette';
 import { THEME } from '../palette';
 import type { DrawCtx } from '../render';
@@ -373,7 +373,12 @@ export class Ball implements Gadget {
     else if (this.py > hiY) this.py = hiY;
   }
 
-  /** Se lleva la arena que le cabe dentro. Las paredes dibujadas no se tocan. */
+  /**
+   * Se lleva el material que le cabe dentro. Las paredes dibujadas no se tocan.
+   *
+   * Agua incluida: mirando solo `SAND` la bola dejaria dentro de si misma un
+   * disco de agua intacto, flotando y visible a traves de ella.
+   */
   private devour(g: Grid): void {
     const r2 = this.r * this.r;
     const y0 = Math.max(0, this.cy - this.r);
@@ -387,7 +392,8 @@ export class Ball implements Gadget {
         const dx = x - this.cx;
         if (dx * dx + dy * dy > r2) continue;
         const i = g.idx(x, y);
-        if (g.mat[i] === SAND) g.removeAt(i);
+        const m = g.mat[i]!;
+        if (m === SAND || m === WATER) g.removeAt(i);
       }
     }
     // Lo que quedaba encima se desmorona en el hueco que acaba de abrir.

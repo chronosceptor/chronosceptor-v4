@@ -1,6 +1,6 @@
 import { Grid } from './grid';
-import { EMPTY, LEDGE, SAND, SINK, WALL } from './materials';
-import { grainColor, type Palette } from './palette';
+import { EMPTY, LEDGE, SAND, SINK, WALL, WATER } from './materials';
+import { grainColor, waterColor, type Palette } from './palette';
 import { mulberry32, randFloat, randInt, type Rng } from './rng';
 
 /** Filas del borde inferior reservadas al drenaje: no se puede dibujar en ellas. */
@@ -237,6 +237,16 @@ export class Source {
   ) {}
 
   /**
+   * Que siembra: `SAND` o `WATER`.
+   *
+   * Lo fija el boton del dock, y es global — lo escribe el bucle en todas las
+   * fuentes en cada paso. Cambiarlo entra en el mismo fotograma y no repinta
+   * nada de lo ya caido, igual que la paleta: el charco que ya esta sigue
+   * siendo charco y encima empieza a caer arena.
+   */
+  material: number = SAND;
+
+  /**
    * Semiancho de la siembra en la fila `r` del cono, en celdas.
    *
    * Cero en el vertice —una sola celda— y `halfWidth` al final. Vive en la
@@ -245,8 +255,66 @@ export class Source {
    * fuesen dos cuentas distintas, acabarian siendo dos formas distintas.
    */
   halfAt(r: number): number {
-    if (r >= this.spread) return this.halfWidth;
-    return Math.round((this.halfWidth * (r + 1)) / this.spread);
+    const agua = this.material === WATER;
+    const filas = agua ? this.jetRows : this.spread;
+    const half = agua ? this.jetHalf : this.halfWidth;
+    if (r >= filas) return half;
+    return Math.round((half * (r + 1)) / filas);
+  }
+
+  /**
+   * Semiancho de la boca del chorro de agua: la mitad mas ancha que la de la
+   * arena.
+   *
+   * No es gusto, es caudal. El techo real de una fuente es el numero de celdas
+   * en las que puede sembrar, y la boca corta del agua tiene ocho veces menos
+   * filas que el cono. Medido a 1.575 granos/s pedidos: con el semiancho de la
+   * arena salen 830 celdas/s —la mitad que la arena— y ensanchandola a una vez
+   * y media, 1.096, que ya esta al nivel de las 1.262 que consigue el cono.
+   *
+   * Va por proporcion y no como numero de celdas para que suba sola con la
+   * finura del grano, que es lo que hace `regrain` con la boquilla.
+   */
+  private get jetHalf(): number {
+    return Math.round(this.halfWidth * 1.5);
+  }
+
+  /**
+   * Filas que tarda en abrirse el chorro de AGUA.
+   *
+   * El cono largo de la arena es lo que hace que un vertido se lea como que
+   * crece, y con la arena funciona porque los granos van sueltos: lo que se ve
+   * es una nube que se abre. El agua va pegada, asi que ese mismo cono no se
+   * lee como un chorro sino como un triangulo macizo colgando de un punto —una
+   * forma, no un flujo—.
+   *
+   * Abriendose en una octava parte de las filas queda un chorro recto que se
+   * ensancha solo lo justo en la boca. Se conserva el vertice de una celda, que
+   * es lo que evita que aparezca una linea de trece celdas de la nada; lo que
+   * se pierde es el triangulo.
+   */
+  get jetRows(): number {
+    return Math.max(3, Math.round(this.spread / 8));
+  }
+
+  /**
+   * Filas en las que se siembra de verdad.
+   *
+   * Para la arena es el cono entero: cada grano sortea una fila y baja hasta
+   * encontrar hueco, y ese volumen es lo que mantiene el vertice macizo.
+   *
+   * Para el agua es solo la boca, las mismas filas que tarda en abrirse.
+   * Sembrando en las 51 filas, el agua —que va
+   * pegada, no suelta como la arena— llena ese volumen entero y aparece una
+   * losa densa que se corta en seco justo donde acaba el cono: el borde recto
+   * a media caida es exactamente lo que se ve como un triangulo pegado a la
+   * nada. Sembrando solo en la boca, lo de abajo es agua que CAE, con su
+   * densidad de caida, y el chorro no tiene borde. El techo de caudal aguanta:
+   * trece columnas a cinco celdas por frame son ~3.900 granos/s contra los
+   * 1.575 que pide la fuente.
+   */
+  get seedRows(): number {
+    return this.material === WATER ? this.jetRows : this.spread;
   }
 
   /** Arranca un lote de color nuevo. Lo llama el cambio de cancion. */
@@ -279,10 +347,14 @@ export class Source {
       // razon por la que antes se sembraba en dos filas y no en una, extendida
       // al cono entero — y de paso sube el techo real de caudal, que es el
       // numero de celdas donde se puede sembrar y no `rate`.
-      for (let r = randInt(rand, 0, this.spread - 1); r <= this.spread; r++) {
+      const filas = this.seedRows;
+      for (let r = randInt(rand, 0, filas - 1); r <= filas; r++) {
         const hw = this.halfAt(r);
         const x = this.x + randInt(rand, -hw, hw);
-        if (g.addSand(x, this.y + r, grainColor(palette, rand, this.dominant, 0.94))) {
+        const puesto = this.material === WATER
+          ? g.addWater(x, this.y + r, waterColor(palette, rand))
+          : g.addSand(x, this.y + r, grainColor(palette, rand, this.dominant, 0.94));
+        if (puesto) {
           placed++;
           break;
         }
@@ -396,8 +468,8 @@ export class Drain {
    */
   tick(g: Grid, sourceBlocked = false): void {
     const should = this.open
-      ? g.sandCount > this.low
-      : g.sandCount > this.high || sourceBlocked;
+      ? g.ocupadas > this.low
+      : g.ocupadas > this.high || sourceBlocked;
     if (should === this.open) return;
     this.open = should;
     this.write(g);
@@ -428,16 +500,20 @@ export function isDrawable(g: Grid, y: number): boolean {
 
 /** Vacia el lienzo: quita paredes y material, deja el drenaje cerrado. */
 export function clearWorld(g: Grid, drain: Drain): void {
-  const { mat, col, vel, awake, size } = g;
+  const { mat, col, vel, wet, flow, awake, size } = g;
   for (let i = 0; i < size; i++) {
-    if (mat[i] === WALL || mat[i] === SAND) {
+    const m = mat[i]!;
+    if (m === WALL || m === SAND || m === WATER) {
       mat[i] = EMPTY;
       col[i] = 0;
       vel[i] = 0;
     }
+    wet[i] = 0;
+    flow[i] = 0;
     awake[i] = 1;
   }
   g.sandCount = 0;
+  g.waterCount = 0;
   drain.reset(g);
 }
 

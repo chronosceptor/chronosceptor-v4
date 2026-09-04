@@ -1,6 +1,7 @@
 # CLAUDE.md
 
-Lienzo de física: cae arena, el usuario dibuja paredes que la desvían, y el color sale de
+Lienzo de física: cae **arena o agua** —lo elige un interruptor del dock—, el usuario dibuja paredes
+que las desvían, y donde se juntan sale lodo, que es arena con humedad. El color sale de
 la paleta que elija en el dock. Astro **enteramente estático**: ya no hay endpoints, ni
 variables de entorno, ni nada que resolver en servidor.
 
@@ -232,6 +233,39 @@ La justificación de fondo de cada decisión de física está en el README, secc
   único saturado del cuadro: cualquier velo o trama por encima lo apaga — unas rayas sobre el canvas
   volvían el amarillo un verde sucio. El velo y el semitono del fondo están puestos así a propósito,
   y superponerlos es la primera tentación al vestir la escena.
+- **Hay DOS materiales que caen, `SAND` y `WATER`.** Cualquier código que mire `=== SAND` tiene que
+  decir en qué caso está: la bola se come los dos, la explosión sólo la arena (a propósito: el agua
+  se mete en el cráter), la brocha aparta los dos, y `addSand` acepta además una celda de agua —la
+  sustituye y el grano nace empapado—. `Grid.sandCount` y `waterCount` van por separado y lo que
+  miran el drenaje y el presupuesto del emisor es `Grid.ocupadas`, la suma.
+- **El guardia del bucle caliente son dos comparaciones contra literales, y no una tabla.** Lo
+  natural, con `SOLID` e `IS_MASS` delante, es un `IS_MOBILE[m]`, y sale un 20-40% más caro: la
+  segunda lectura de array se paga en las 326.000 celdas del lienzo. Mismo caso en `paintSand`. Si
+  añades un tercer material que caiga, mídelo antes de dar por buena la tabla o el `switch`.
+- **Tres cosas del lodo que se probaron al revés y no funcionan** (los números, en el README): la
+  cohesión tiene que ser un **umbral** (`WET_HOLD`) y no sólo una probabilidad; el `wet = 255` por
+  contacto con agua va **antes** de la puerta de cohesión y no al aterrizar; y el agua **se filtra**
+  por la arena intercambiándose con ella, nunca absorbiéndose.
+- **Constantes en celdas nuevas, del grupo que `regrain` NO alcanza:** `FLOW_REACH`, `SOAK_P`,
+  `WET_HOLD` en `physics.ts`, y `SWEEP_FRAMES`, `DRY`, `SEEP` en `moisture.ts`. Si vuelves a mover
+  `cell` de verdad, van con las demás.
+- **`moisture.ts` es el único sitio que toca celdas dormidas**, y tiene que llamar a `wake` cuando la
+  humedad cambia o el lodo se seca en el array y sigue de pie en pantalla. Cuesta 0,03 ms sobre un
+  lienzo seco y sube la simulación de 1,7 a 4,2 ms con el lienzo entero de lodo secándose.
+- **`dump()` saca `~` para el agua y la arena mojada en MAYÚSCULA (`O` contra `o`).** Es lo único con
+  lo que se ve por dónde va el frente de mojado.
+- **Para medir física, un banco en Node vale mucho más que el navegador.** La pestaña del MCP se
+  estrangula sola —se han visto 4 fps— y entonces `msSim` mide hasta tres pasos por fotograma y no
+  significa nada: con 550 granos marcaba 7,6 ms. Los módulos de `src/sand/` no importan nada de
+  Astro, así que se empaquetan con `./node_modules/.bin/esbuild bench.ts --bundle --platform=node
+  --format=esm --outfile=bench.mjs` y se corren con `node`. Así se midió el A/B contra `main` (con
+  `git stash` en medio), el caudal de la fuente y el talud del lodo, todo determinista.
+- **Antes de dar por malo un cambio de talud, corre el control sin tocar nada.** Un cono recién caído
+  sigue asentándose durante casi un minuto: medía 378 de alto justo después de emitir y 136 un rato
+  después **sin agua ninguna**. Estuve a punto de acusar al agua de derrumbarlo.
+- **La cohesión no se ve en un montón que ya está en reposo.** Mojar un cono asentado no lo cambia
+  —no tenía razones para moverse—; la prueba que sí lo enseña es apoyar el montón contra una pared
+  dibujada, quitarla, y mirar cuánto queda de la cara vertical. Seca aguanta el 55%, mojada el 100%.
 
 ## Depuración
 
@@ -239,8 +273,9 @@ Todo desde la consola del navegador, sobre `window.fabrica`:
 
 - `fabrica.dump(x, y, w, h)` — vuelca los materiales de una región como texto. **Es la que
   encontró todos los bugs de física**; sin ella no se ve por qué la arena no pasa.
-- `fabrica.inspect()` — arena, paredes, fps, coste real de simulación y pintado, celdas
-  despiertas.
+- `fabrica.inspect()` — arena, **agua**, **mojada**, paredes, fps, coste real de simulación y
+  pintado, celdas despiertas.
+- `fabrica.setEmitMaterial('sand' | 'water')` — lo mismo que el botón del dock, sin gesto.
 - `fabrica.clear()` — vacía el lienzo (arena, paredes y piezas).
 - `fabrica.beginPlacement(kind)` / `movePlacement(x, y)` / `endPlacement()` — coloca una
   pieza sin gestos. Imprescindible para probar con Playwright: los `PointerEvent`

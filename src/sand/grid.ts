@@ -1,4 +1,4 @@
-import { EMPTY, SAND, SOLID } from './materials';
+import { EMPTY, SAND, SOLID, WATER } from './materials';
 
 /**
  * El estado del mundo. Todo son arrays tipados planos indexados por `y * w + x`.
@@ -27,13 +27,32 @@ export class Grid {
    * solo acceso de array, y así cada banda puede correr a su propio ritmo.
    */
   readonly beltSpeed: Uint8Array;
+  /**
+   * Humedad de un grano de arena, 0-255. En una celda que no sea `SAND` no
+   * significa nada.
+   *
+   * El lodo es esto y no un material aparte: un `MUD` propio obligaria a
+   * duplicar las ocho ramas del automata y a decidir en que se convierte al
+   * secarse. Como byte es un gradiente — la cohesion sube con el, asi que hay
+   * todo el camino entre arena suelta y barro que se sostiene de pie.
+   */
+  readonly wet: Uint8Array;
+  /**
+   * Sentido en el que viaja una celda de agua: -1, 0 o +1.
+   *
+   * Sin memoria de direccion un charco no se nivela, vibra: cada celda sortea
+   * un lado, se mueve, y al frame siguiente sortea el contrario. Nunca se
+   * duerme ninguna y la superficie hierve sin llegar a plana.
+   */
+  readonly flow: Int8Array;
 
   sandCount = 0;
+  waterCount = 0;
 
   /**
    * Salida para un grano barrido que no cabe en ningun hueco.
    *
-   * Sin ella `displaceSand` lo destruye, y cualquier pieza en movimiento metida
+   * Sin ella `displaceMobile` lo destruye, y cualquier pieza en movimiento metida
    * en un monton compacto va vaciando la escena: medido, una sola cruz bajo el
    * chorro se comia 337 granos en 5 s — un 15% del caudal — y el lienzo dejaba
    * de llenarse sin que nada lo explicara.
@@ -53,6 +72,19 @@ export class Grid {
     this.awake = new Uint8Array(this.size);
     this.moved = new Uint8Array(this.size);
     this.beltSpeed = new Uint8Array(this.size);
+    this.wet = new Uint8Array(this.size);
+    this.flow = new Int8Array(this.size);
+  }
+
+  /**
+   * Celdas ocupadas por material que cae, arena y agua juntas.
+   *
+   * Es lo que miran el drenaje y el presupuesto del emisor. Contar solo arena
+   * dejaria que un chorro de agua llenara el lienzo entero sin que nada lo
+   * frenara: ni el tope de celdas ni el nivel de disparo llegarian a saltar.
+   */
+  get ocupadas(): number {
+    return this.sandCount + this.waterCount;
   }
 
   idx(x: number, y: number): number {
@@ -94,23 +126,58 @@ export class Grid {
     }
   }
 
+  /**
+   * Siembra un grano de arena. Tambien entra sobre una celda de agua: la
+   * sustituye y el grano nace empapado.
+   *
+   * Esa excepcion resuelve tres cosas de una vez sin un caso especial en cada
+   * sitio: la arena que cae en un charco sale ya de lodo, la ejecta que
+   * aterriza en el agua no se cuenta como perdida, y el cono de una fuente
+   * puede sembrar sobre agua en vez de rechazar el grano y perder caudal.
+   */
   addSand(x: number, y: number, color: number): boolean {
     if (!this.inBounds(x, y)) return false;
     const i = y * this.w + x;
-    if (this.mat[i] !== EMPTY) return false;
+    const m = this.mat[i]!;
+    if (m !== EMPTY && m !== WATER) return false;
+    if (m === WATER) {
+      this.waterCount--;
+      this.wet[i] = 255;
+    } else {
+      this.wet[i] = 0;
+    }
     this.mat[i] = SAND;
     this.col[i] = color;
     this.vel[i] = 0;
+    this.flow[i] = 0;
     this.sandCount++;
     this.wake(x, y);
     return true;
   }
 
+  addWater(x: number, y: number, color: number): boolean {
+    if (!this.inBounds(x, y)) return false;
+    const i = y * this.w + x;
+    if (this.mat[i] !== EMPTY) return false;
+    this.mat[i] = WATER;
+    this.col[i] = color;
+    this.vel[i] = 0;
+    this.wet[i] = 0;
+    this.flow[i] = 0;
+    this.waterCount++;
+    this.wake(x, y);
+    return true;
+  }
+
   removeAt(i: number): void {
-    if (this.mat[i] === SAND) this.sandCount--;
+    const m = this.mat[i]!;
+    if (m === SAND) this.sandCount--;
+    else if (m === WATER) this.waterCount--;
     this.mat[i] = EMPTY;
     this.col[i] = 0;
     this.vel[i] = 0;
+    this.wet[i] = 0;
+    this.flow[i] = 0;
     this.wake(i % this.w, (i / this.w) | 0);
   }
 
@@ -126,7 +193,8 @@ export class Grid {
   stamp(x: number, y: number, material: number, pushDir = 0): void {
     if (!this.inBounds(x, y)) return;
     const i = y * this.w + x;
-    if (this.mat[i] === SAND) this.displaceSand(x, y, pushDir);
+    const m = this.mat[i]!;
+    if (m === SAND || m === WATER) this.displaceMobile(x, y, pushDir);
     this.mat[i] = material;
     this.wake(x, y);
   }
@@ -144,9 +212,11 @@ export class Grid {
    * alterna segun la paridad de la celda, que no introduce sesgo y mantiene el
    * determinismo de la semilla.
    */
-  private displaceSand(x: number, y: number, pushDir = 0): void {
+  private displaceMobile(x: number, y: number, pushDir = 0): void {
     const i = this.idx(x, y);
+    const material = this.mat[i]!;
     const color = this.col[i]!;
+    const wet = this.wet[i]!;
     const d = pushDir !== 0 ? pushDir : ((x ^ y) & 1) === 0 ? 1 : -1;
     const offsets: Array<readonly [number, number]> = [
       [d, -1], [0, -1], [-d, -1], [d, 0], [-d, 0], [d * 2, -1], [0, -2], [-d * 2, -1],
@@ -157,18 +227,30 @@ export class Grid {
       if (!this.inBounds(nx, ny)) continue;
       const ni = ny * this.w + nx;
       if (this.mat[ni] === EMPTY) {
-        this.mat[ni] = SAND;
+        this.mat[ni] = material;
         this.col[ni] = color;
         this.vel[ni] = 0;
+        this.wet[ni] = wet;
+        this.flow[ni] = 0;
         this.wake(nx, ny);
         this.mat[i] = EMPTY;
-        return; // sandCount no cambia: el grano se movió, no se destruyó
+        this.wet[i] = 0;
+        return; // los contadores no cambian: se movió, no se destruyó
       }
     }
     // No cabia en ningun hueco. Sale del grid en cualquier caso; la diferencia
     // es si sigue existiendo (sale volando) o se pierde de verdad.
     this.mat[i] = EMPTY;
     this.col[i] = 0;
+    this.wet[i] = 0;
+    this.flow[i] = 0;
+    if (material === WATER) {
+      // El agua barrida que no cabe se pierde y ya esta: la salida de emergencia
+      // es la ejecta, que es balistica y aterriza como arena. Una gota lanzada
+      // por una rueda volveria convertida en grano.
+      this.waterCount--;
+      return;
+    }
     this.sandCount--;
     this.overflow?.(x, y, color, d);
   }

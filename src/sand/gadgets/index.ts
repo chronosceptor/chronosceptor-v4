@@ -65,6 +65,8 @@ export interface TickCtx {
   /** Arena balistica: la bomba lanza aqui, y aqui van los granos que no caben. */
   ejecta: Ejecta;
   palette: Palette;
+  /** Que siembran las fuentes en este paso: `SAND` o `WATER`. Es global. */
+  material: number;
   rand: () => number;
   /** Granos que aun caben antes del tope de arena viva. Lo reparte el emisor. */
   budget: number;

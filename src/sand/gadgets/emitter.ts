@@ -131,6 +131,16 @@ export class Emitter implements Gadget {
     return new Emitter(source.x, source.y, source);
   }
 
+  /**
+   * Que siembra. Lo escribe el bucle en cada paso, y tambien la colocacion
+   * mientras se arrastra el fantasma: la forma del chorro depende del material
+   * —el agua sale recta y la arena en cono—, asi que un fantasma que no lo
+   * supiera prometeria un cono por donde luego va a salir un chorro.
+   */
+  setMaterial(m: number): void {
+    this.source.material = m;
+  }
+
   onMoved(): void {
     this.source.x = this.cx;
     this.source.y = this.cy;
@@ -184,6 +194,7 @@ export class Emitter implements Gadget {
     // dentro de su propia explosion no se lee como una boquilla destruida.
     if (paso === 'humo') return;
 
+    this.setMaterial(c.material);
     this.source.tick(c.grid, dt, c.palette, c.rand, c.budget);
   }
 

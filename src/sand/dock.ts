@@ -86,6 +86,29 @@ export function mountDock(app: SandApp, root: HTMLElement, onActivity: () => voi
     on(chip, 'pointercancel', () => app.cancelPlacement());
   }
 
+  // --- Que cae: arena o agua ------------------------------------------------
+  //
+  // Es un interruptor de la escena, no una herramienta: cambia lo que siembran
+  // todas las fuentes a la vez y entra en el fotograma siguiente, sin repintar
+  // nada de lo que ya cayo. Igual que la paleta — y por la misma razon, que es
+  // que lo que se ve en el lienzo es historia y no estado.
+  //
+  // No se guarda en localStorage a proposito. La paleta si, porque es una
+  // preferencia de aspecto; abrir la pagina y que caiga agua sin haberlo pedido
+  // se leeria como que algo se ha roto.
+  const material = root.querySelector<HTMLButtonElement>('#dock-material');
+  if (material) {
+    on(material, 'click', () => {
+      const agua = app.emitMaterial !== 'water';
+      app.setEmitMaterial(agua ? 'water' : 'sand');
+      material.setAttribute('aria-pressed', String(agua));
+      const rotulo = agua ? 'Cae agua' : 'Cae arena';
+      material.title = rotulo;
+      material.setAttribute('aria-label', rotulo);
+      onActivity();
+    });
+  }
+
   // --- Color de la arena ----------------------------------------------------
   //
   // El color no es un modo ni una herramienta activa: se elige una vez y se

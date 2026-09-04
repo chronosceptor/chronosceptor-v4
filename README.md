@@ -4,15 +4,21 @@ Un lienzo de física a pantalla completa. El mundo arranca vacío, cae arena des
 y con el ratón o el dedo se dibujan paredes que la desvían — como un MS Paint donde el trazo *es* la
 física. Una rampa la hace bajar, una U la atrapa, un embudo la concentra.
 
-No hay herramientas que elegir: hay una sola materia sólida y todo el comportamiento sale de la
+No hay herramientas que elegir: el trazo es siempre el mismo y todo el comportamiento sale de la
 forma que dibujes.
+
+Lo que cae puede ser **arena o agua**, y lo decide un interruptor del dock. El agua se atrapa con el
+lápiz igual que la arena, sólo que con su física: no hace talud, busca nivel, y se escapa por
+cualquier hueco por el que la arena se habría quedado. Y donde se juntan sale **lodo** — que no es un
+tercer material sino arena mojada: se apelmaza, aguanta paredes verticales que la arena seca no
+aguanta, y se va secando hasta volver a desmoronarse sola.
 
 Además, del dock de abajo se arrastran **piezas** que participan de la física de verdad — una bola
 que rebota y desportilla, una bomba y una fuente extra de arena. No son adornos pintados sobre el
 lienzo: su cuerpo se estampa en el grid como material sólido y la arena choca con él. La fuente
 principal es una más: se coge, se pone donde quieras y se puede volar.
 
-El color de la arena lo eliges tú: el botón del extremo del dock despliega ocho paletas y la que
+El color lo eliges tú: el botón del extremo del dock despliega ocho paletas y la que
 marques queda guardada para la próxima visita. Como la fuente rota el color por lotes, los montones
 que atrapes quedan estratificados, y como cada grano guarda su color ya resuelto, al cambiar de
 paleta el color nuevo va sepultando al anterior en vez de repintarlo.
@@ -35,6 +41,8 @@ No hay nada que configurar: no lee nada de fuera y no tiene servidor.
   mantiene hasta soltar, así que no alterna solo a media línea.
 - **Clic derecho arrastrando** fuerza el borrado esté donde esté.
 - **Clear** vacía el lienzo entero.
+- **El interruptor del dock**, junto al de color, cambia entre arena y agua. Afecta a todas las
+  fuentes a la vez y desde el fotograma siguiente; lo que ya cayó se queda como está.
 
 El mismo gesto funciona con dedo y con ratón: no hace falta ningún selector de herramienta ni gestos
 que haya que aprender.
@@ -102,13 +110,18 @@ El dibujo no se guarda: cada visita empieza en blanco.
 |---|---|
 | `?debug=1` | Superpone fps, conteo de arena y paredes, tamaño de grid y modo de brocha |
 | `?fill=0.2` | Baja el nivel al que dispara el drenaje. Sin esto, probar la descarga son varios minutos por ciclo |
+| `?cell=N` | Píxeles por celda, de 2 a 8: el tamaño del grano, con el perfil reescalado. Sirve para juzgar la arena, no las piezas |
 
-Desde la consola: `fabrica.inspect()` (arena, paredes, fps, grid, **piezas**, **dónde** está cada
-una, **ejecta** en vuelo y **perdidos**), `fabrica.dump(x, y, w, h)` (vuelca los materiales de una
+Desde la consola: `fabrica.inspect()` (arena, **agua**, **mojada**, paredes, fps, grid, **piezas**,
+**dónde** está cada una, **ejecta** en vuelo y **perdidos**), `fabrica.dump(x, y, w, h)` (vuelca los materiales de una
 región como texto) y `fabrica.clear()`.
 
 `donde` hace falta porque `dump()` ya no lo ve todo: la bola y la fuente no escriben nada en el
 grid, así que en un volcado de materiales son invisibles.
+
+`mojada` son las celdas de arena con algo de humedad: es el tamaño del lodo. Sube al mojar y no
+vuelve a cero hasta que se ha secado todo — salvo la franja que toca un charco quieto, que se queda
+mojada mientras el charco siga ahí.
 
 `perdidos` es el contador que importa cuando se toca una pieza: son granos que salieron del grid y
 no encontraron dónde volver. Debe quedarse en cero. Si sube sin parar, algo está perdiendo masa.
@@ -125,6 +138,7 @@ src/
     input.ts               gestos
     index.ts               bucle principal
     physics.ts             el automata celular
+    moisture.ts            filtrado y secado de la humedad (el lodo)
     ejecta.ts              arena en vuelo balistico (explosiones y aventado)
     dock.ts                dock: arrastrar piezas, tirarlas, y elegir paleta
     gadgets/               piezas: bomba, fuente, bola, y la explosión
@@ -247,6 +261,91 @@ Cosas que parecen arbitrarias en el código y no lo son:
   de probables la cuenca sale confeti: hacen falta dos tonos de masa, un realce claro y un acento
   suelto para que un montón tenga un color reconocible y los estratos se distingan entre sí. Por eso
   la muestra del dock es un disco con las cuñas del tamaño de su peso — a cuartos iguales mentiría.
+### Del agua y del lodo
+
+- **El lodo no es un material: es un byte de humedad en la arena.** Un `MUD` propio obligaría a
+  duplicar las ocho ramas del autómata y, peor, a decidir en qué se convierte al secarse. Como byte
+  (`Grid.wet`) es un gradiente: la cohesión sube con él, así que existe todo el camino entre arena
+  suelta y barro que se sostiene de pie, y el secado lo recorre hacia atrás sin que nada tenga que
+  cambiar de material. Cuesta un byte por celda, unos 475 KB sobre los 4,3 MB que ya ocupaba el
+  mundo.
+- **La cohesión es un umbral, no una probabilidad.** Escrita sólo como «se aparta con probabilidad
+  1 − humedad», una cara vertical de barro saturado se venía abajo igual que la arena seca: la
+  probabilidad frena un fotograma, pero llegan cientos, y basta con que la humedad baje un punto por
+  debajo del tope para que la cara tenga sesenta oportunidades por segundo de desmoronarse. Medido:
+  con el montón entero a 255 y sin umbral, la cara aguantaba el 60% de su altura contra el 55% de la
+  arena seca — o sea nada. Con umbral (`WET_HOLD`) aguanta el 100% y no derrama una celda. Por
+  debajo del umbral sí es probabilidad, y ahí está el gradiente del desmoronamiento.
+- **El agua se filtra por la arena intercambiándose con ella; no se «absorbe».** La primera versión
+  hacía desaparecer la celda de agua y saturaba el grano que tocaba. No vale, y no es cuestión de
+  ajustar el ritmo: un montón de arena es macizo y el agua no tiene por dónde entrar, así que sólo
+  moja la costra. Medido sobre 20.000 granos, absorbiendo se mojaban 1.573 y ningún valor de los
+  parámetros lo movía de ahí. Filtrándose sí entra — baja por el montón como baja de verdad, moja lo
+  que atraviesa y sale por abajo a encharcarse.
+- **Tocar agua satura el grano ANTES de que decida moverse, no al llegar.** Un grano seco que se
+  desliza y se moja al aterrizar ya ha dado el paso, y con la ladera entera haciendo eso una vez por
+  fotograma el montón se derrite. Medido antes de corregirlo: un cono al que se le echa agua encima
+  quedaba **más plano** que la arena seca, que es exactamente lo contrario del barro.
+- **El agua cuenta como hueco para las diagonales de la arena.** Si no, un montón sumergido no puede
+  avalanchar y se apila en columnas de 90°. Lo que impide que eso licúe la ladera no es la geometría
+  sino la cohesión: la geometría deja pasar, y la humedad decide.
+- **El agua no se retiene en un hueco diagonal, y la arena sí.** La regla diagonal de la arena exige
+  que la celda lateral también esté libre, y es lo que hace que una brocha de una sola celda retenga
+  un montón. El agua no la lleva: se cuela por donde quepa. Un cuenco con un agujero de una celda se
+  vacía, y eso es lo correcto, no un fallo.
+- **La humedad se evapora; no vuelve a salir como agua.** La masa no se conserva y está bien: la
+  alternativa es que el lodo rezume agua, esa agua vuelva a mojar arena, y el ciclo no se pare nunca.
+- **El secado va en un barrido aparte, amortizado y que despierta celdas.** El autómata sólo mira
+  celdas despiertas y la arena mojada asentada duerme: si el secado viviera ahí, un montón de lodo se
+  dormiría entero y no volvería a secarse jamás. `moisture.ts` recorre una franja de filas por
+  fotograma —la rejilla entera una vez por segundo— y llama a `wake` en cuanto la humedad de una
+  celda cambia. Es el único sitio del proyecto que toca celdas dormidas. Sobre un lienzo seco cuesta
+  0,03 ms; el caso peor de verdad es un lienzo entero de lodo secándose, que sube la simulación de
+  1,7 a 4,2 ms de los 16,7 de presupuesto.
+- **El guardia del bucle son dos comparaciones contra literales, no una tabla.** Lo natural, con
+  `SOLID` e `IS_MASS` delante, era un `IS_MOBILE[m]`, y sale entre un 20 y un 40% más caro: mete una
+  segunda lectura de array en la única línea que se ejecuta para las 326.000 celdas del lienzo estén
+  como estén. Medido con el lienzo lleno y asentado: 1,72 ms el bucle de una sola comparación de
+  siempre, 1,75 con las dos comparaciones, 2,11 con la tabla. Lo mismo en el bucle de pintado: 0,36 /
+  0,54 / 0,76 ms. Si algún día hay un tercer material que caiga, hay que volver a medirlo.
+- **El agua no sale en cono: sale en chorro.** El cono largo de la arena es lo que hace que un
+  vertido se lea como que crece, y funciona porque los granos van sueltos — lo que se ve es una nube
+  abriéndose. El agua va pegada, así que ese mismo cono no se lee como un chorro sino como un
+  triángulo macizo colgando de un punto: una forma, no un flujo. El agua se abre en la octava parte
+  de las filas y **sólo se siembra en esa boca**; lo de más abajo es agua que cae, con su densidad de
+  caída, así que el chorro no tiene borde. Sembrando en las 51 filas aparecía una losa densa cortada
+  en seco justo donde acababa el cono, y ese borde recto a media caída es lo que se veía raro.
+- **La boca del chorro de agua es la mitad más ancha que la de la arena, y es caudal, no gusto.** El
+  techo real de una fuente es el número de celdas en las que puede sembrar, y la boca corta del agua
+  tiene ocho veces menos filas que el cono. Medido a 1.575 granos/s pedidos: con el semiancho de la
+  arena salen 830 celdas/s —la mitad que la arena— y ensanchándola a una vez y media, 1.097, contra
+  las 1.509 de la arena.
+- **El agua cuenta para el disparo del drenaje y para el tope de celdas.** Si sólo contara la arena,
+  un chorro de agua llenaría el lienzo sin que nada lo frenara.
+- **La explosión no toca el agua, y el desplazamiento de piezas la destruye en vez de lanzarla.** La
+  ejecta es balística y aterriza llamando a `addSand`, así que una gota lanzada volvería convertida
+  en grano. Además queda mejor sin tocarla: la bomba cava el hoyo en la arena y el agua se mete
+  dentro sola en los fotogramas siguientes.
+- **El agua es lo único translúcido de la escena (alfa 210).** El canvas de arena va sobre el fondo
+  de `#escena`, así que por debajo del charco se lee la trama del fondo. Sin eso el agua queda como
+  una plancha de plástico opaca; con eso se lee como líquido sin pintarle encima ningún brillo ni
+  reflejo.
+- **El color del agua sale de la paleta pero pesa más el azul de referencia que el acento.** Un lerp
+  suave hacia el azul deja un agua roja en Brasa, cuyo acento es un coral. Con la referencia al 72%
+  las ocho aguas caen entre 0,266 y 0,294 de luminancia —el fondo está en 0,043 y la arena entre 0,49
+  y 0,96—, así que el agua se separa siempre de las dos y conserva un rastro del tono de su paleta.
+- **El lodo se oscurece al pintar, no al mojarse.** Guardar el color ya oscurecido en `col` sería más
+  barato, pero el secado no tendría cómo devolver el original y no hay sitio para dos colores por
+  celda. Se queda en el 65% de brillo a saturación completa: más oscuro se confunde con el agua, y
+  menos no se nota que está mojado.
+- **La memoria de dirección del agua (`Grid.flow`) no es un adorno.** Sin ella un charco no se
+  nivela, hierve: cada celda sortea un lado, se mueve, y al fotograma siguiente sortea el contrario,
+  y no se duerme ninguna. Con ella un charco a nivel se duerme entero y sólo quedan despiertas las
+  dos celdas del borde, que avanzan hasta topar con algo. Medido: 88.500 celdas de agua sueltas en el
+  lienzo se asientan en una superficie de 308 a 317 contra un nivel ideal de 314.
+
+### Del resto
+
 - **Elegir paleta entra al instante; el cambio de canción no lo hacía.** Cuando el color venía de
   Last.fm, `setPalette` paraba la siembra 1,2 s para que el corte se leyera como un suceso ajeno.
   Elegido a mano eso es latencia: se toca un color y no cae hasta pasado más de un segundo. Ahora el

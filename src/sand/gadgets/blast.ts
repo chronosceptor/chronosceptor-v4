@@ -89,6 +89,10 @@ export function detonateAt(c: TickCtx, cx: number, cy: number): void {
         continue;
       }
 
+      // El agua se queda: no vuela. La ejecta es balistica y aterriza llamando
+      // a `addSand`, asi que una gota lanzada volveria convertida en grano —y
+      // ademas queda mejor sin tocarla, porque la explosion cava el hoyo en la
+      // arena y el agua se mete dentro sola en los frames siguientes.
       if (m !== SAND) continue;
       // Si no cabe una particula mas, el grano se queda donde esta. Sacarlo
       // del grid sin poder lanzarlo seria destruirlo, y una explosion mueve
