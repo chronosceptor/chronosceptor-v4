@@ -41,6 +41,12 @@ versionado según [SemVer](https://semver.org/lang/es/).
   pulsarla, sacando cualquier ficha o vaciando el lienzo, y el clic derecho sigue borrando mientras
   tanto. Medido: un trazo de 726 celdas de largo por tres de grosor arde entero en 9 s sin perder
   un solo grano, y dos trazos separados por 30 celdas se quedan en que arde sólo el prendido.
+- **Un botón para reventar todas las bolas a la vez**, entre la bola y la bomba. Las **arma**, no las
+  detona: todas encienden su mecha y siguen rebotando los dos segundos que arden, cada una con su aro
+  de alcance y su cuenta atrás, así que para cuando revientan están repartidas por otro sitio y cada
+  explosión prende a las que le pille dentro. La cadena se va corriendo por el lienzo en vez de
+  resolverse donde estaban, que es toda la gracia — detonarlas en el sitio sería un fogonazo. Volver
+  a pulsarlo no reinicia lo que ya arde, y el botón se apaga cuando no hay ninguna bola puesta.
 - **`inspect()` trae `agua`, `mojada` y `fuego`**, y `dump()` saca `~` para el agua, la arena mojada
   en mayúscula y `*` para la pared que arde. Sin esos glifos no hay forma de ver por dónde va el
   frente de mojado ni el del fuego, que es lo primero que hace falta mirar cuando no se comportan.
@@ -48,6 +54,14 @@ versionado según [SemVer](https://semver.org/lang/es/).
 
 ### Changed
 
+- **Los textos de la interfaz pasan a inglés.** La página se sirve con `lang="en"` y sus metadatos ya
+  estaban en inglés desde el principio; el dock era lo único que quedaba en castellano. Cambian los
+  rótulos de los botones, el aviso de la papelera y los nombres de las ocho paletas. Los `id` de las
+  paletas se quedan como estaban a propósito: son lo que hay guardado en `localStorage`, y
+  traducirlos habría devuelto a la de serie a todo el que ya hubiera elegido color.
+- **El dock encoge en pantallas de menos de 380 px.** Con siete botones medía 343 px y en un móvil de
+  320 se salía once por lado, cortando la primera ficha y el disco de color. Los botones bajan a 40
+  px, desaparece el hueco entre fichas y se estrecha el separador.
 - **El chorro de agua no sale en cono.** El cono largo funciona con la arena porque los granos van
   sueltos y lo que se ve es una nube abriéndose; el agua va pegada y ese mismo cono se lee como un
   triángulo macizo colgando de un punto — una forma, no un flujo. Ahora el agua se abre en la octava

@@ -59,8 +59,12 @@ export interface DockHooks {
    * estados distintos porque el dock los pinta distinto: con el lienzo lleno se
    * apagan todas las fichas menos la de la bomba, que es la que sigue sirviendo
    * para hacer sitio.
+   *
+   * `balls` va aparte del total porque el boton de reventarlas no tiene nada
+   * que hacer si no hay ninguna, y un boton que no hace nada tiene que decirlo
+   * antes de que lo pulsen.
    */
-  onCount(count: number, full: boolean, onlyBomb: boolean): void;
+  onCount(count: number, full: boolean, onlyBomb: boolean, balls: number): void;
   /**
    * Cambio la herramienta activa.
    *
@@ -88,6 +92,13 @@ export interface SandApp {
   /** La antorcha: con `'fire'`, el gesto prende paredes en vez de dibujarlas. */
   setTool(t: Tool): void;
   readonly tool: Tool;
+  /**
+   * Enciende la mecha de todas las bolas puestas. Devuelve cuantas.
+   *
+   * Las arma, no las detona: siguen rebotando los dos segundos que arden y
+   * revientan en cadena por donde les pille.
+   */
+  armBalls(): number;
   /** Vacia el lienzo. */
   clear(): void;
   readonly palette: Palette;
@@ -200,7 +211,7 @@ export function boot(opts: BootOptions): SandApp {
   let announced = -1;
   const announce = (): void => {
     announced = gadgets.count;
-    dock?.onCount(gadgets.count, gadgets.full, gadgets.onlyBomb);
+    dock?.onCount(gadgets.count, gadgets.full, gadgets.onlyBomb, gadgets.balls);
   };
 
   /**
@@ -732,6 +743,9 @@ export function boot(opts: BootOptions): SandApp {
     },
     setTool(t: Tool): void {
       usarHerramienta(t);
+    },
+    armBalls(): number {
+      return gadgets.armBalls();
     },
     get tool(): Tool {
       return tool;

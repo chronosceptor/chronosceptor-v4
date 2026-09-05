@@ -50,6 +50,12 @@ export function hexToRgb(hex: string): Rgb {
  */
 const MEZCLA = [3, 3, 2, 1];
 
+/**
+ * El `id` va en castellano y el `name` en ingles, y no es un descuido: el `id`
+ * es lo que se guarda en `localStorage`, asi que traducirlo devolveria a todo
+ * el que ya haya elegido color a la paleta de serie. El `name` es lo unico que
+ * se ve.
+ */
 const paleta = (id: string, name: string, ...hex: string[]): Palette => ({
   id,
   name,
@@ -69,14 +75,14 @@ const paleta = (id: string, name: string, ...hex: string[]): Palette => ({
  * La primera es la de serie.
  */
 export const PALETTES: readonly Palette[] = [
-  paleta('ocre', 'Ocre', '#C97B4A', '#E0B48C', '#F2E4CE', '#7E9B8A'),
-  paleta('brasa', 'Brasa', '#EF6D3C', '#F7A85F', '#F9E4B6', '#E0685F'),
-  paleta('rosa', 'Rosa', '#E8998D', '#F2C9A9', '#F6EEE2', '#C0849A'),
-  paleta('ciruela', 'Ciruela', '#D45FBE', '#EE9AD3', '#F4D8EC', '#9E7EDC'),
-  paleta('oceano', 'Océano', '#3FA9E0', '#79C7EC', '#CFE6F2', '#5B7FD4'),
-  paleta('menta', 'Menta', '#2EC4B6', '#8CE0CE', '#E4FBF4', '#5FA8A0'),
-  paleta('bosque', 'Bosque', '#8FA96B', '#C2CFA0', '#E7EFD6', '#5E9E7E'),
-  paleta('crudo', 'Crudo', '#B9B4A6', '#DAD5C6', '#F0ECE2', '#8C8880'),
+  paleta('ocre', 'Ochre', '#C97B4A', '#E0B48C', '#F2E4CE', '#7E9B8A'),
+  paleta('brasa', 'Ember', '#EF6D3C', '#F7A85F', '#F9E4B6', '#E0685F'),
+  paleta('rosa', 'Rose', '#E8998D', '#F2C9A9', '#F6EEE2', '#C0849A'),
+  paleta('ciruela', 'Plum', '#D45FBE', '#EE9AD3', '#F4D8EC', '#9E7EDC'),
+  paleta('oceano', 'Ocean', '#3FA9E0', '#79C7EC', '#CFE6F2', '#5B7FD4'),
+  paleta('menta', 'Mint', '#2EC4B6', '#8CE0CE', '#E4FBF4', '#5FA8A0'),
+  paleta('bosque', 'Forest', '#8FA96B', '#C2CFA0', '#E7EFD6', '#5E9E7E'),
+  paleta('crudo', 'Ecru', '#B9B4A6', '#DAD5C6', '#F0ECE2', '#8C8880'),
 ];
 
 /** La de serie: la que corre mientras nadie elija otra. */

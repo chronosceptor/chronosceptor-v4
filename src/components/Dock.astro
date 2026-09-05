@@ -21,11 +21,16 @@ import { PALETTES, rgbCss, type Palette } from '../sand/palette';
  * `id` decide el icono y `kind` la pieza: dos fichas distintas colocan la misma
  * clase con distinto material.
  */
+/**
+ * Los rotulos van en INGLES aunque el codigo y los comentarios vayan en
+ * castellano: la pagina se sirve con `lang="en"` y sus metadatos ya estaban en
+ * ingles, asi que el dock era lo unico que desentonaba.
+ */
 const PIEZAS = [
-  { id: 'emitter-sand', kind: 'emitter', material: 'sand', label: 'Fuente de arena' },
-  { id: 'emitter-water', kind: 'emitter', material: 'water', label: 'Fuente de agua' },
-  { id: 'ball', kind: 'ball', material: null, label: 'Bola: rebota y se come la arena' },
-  { id: 'bomb', kind: 'bomb', material: null, label: 'Bomba' },
+  { id: 'emitter-sand', kind: 'emitter', material: 'sand', label: 'Sand source' },
+  { id: 'emitter-water', kind: 'emitter', material: 'water', label: 'Water source' },
+  { id: 'ball', kind: 'ball', material: null, label: 'Ball: bounces and eats the sand' },
+  { id: 'bomb', kind: 'bomb', material: null, label: 'Bomb' },
 ] as const;
 
 /**
@@ -48,7 +53,7 @@ function disco(p: Palette): string {
 const INICIAL = PALETTES[0]!;
 ---
 
-<div id="dock" role="toolbar" aria-label="Piezas y color">
+<div id="dock" role="toolbar" aria-label="Pieces, tools and colour">
   <div id="dock-fichas">
     {
       PIEZAS.map(({ id, kind, material, label }) => (
@@ -108,12 +113,33 @@ const INICIAL = PALETTES[0]!;
             que atenua `#dock.lleno`, y el fuego no ocupa ninguna de las diez
             plazas. Al contrario, es otra forma de hacer sitio — igual que la
             bomba, que tambien sigue disponible con el lienzo al tope. */}
+        {/* Reventar las bolas, entre la bola y la bomba: es lo que le hace algo
+            a una y lo que hace la otra. Tampoco lleva `.ficha` —no se arrastra
+            y no ocupa plaza—, pero al reves que la antorcha SI se apaga solo,
+            cuando no hay ninguna bola puesta: es una accion sobre lo que ya
+            hay, y sin nada sobre lo que actuar no tiene nada que ofrecer. */}
+        {id === 'ball' && (
+          <button
+            type="button"
+            id="dock-reventar"
+            title="Blow up every ball"
+            aria-label="Blow up every ball"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              {/* Estallido de ocho puntas, hueco y del mismo trazo que la bomba
+                  y la antorcha: lo que revienta va a linea y lo que cae va
+                  macizo. Los radios son desiguales a proposito y estan escritos
+                  a mano — una estrella regular se lee como un asterisco. */}
+              <path d="M11.90 2.83L13.30 8.68L17.81 6.14L15.63 10.51L20.83 12.05L15.01 13.33L17.61 17.75L13.41 15.68L11.90 21.17L10.58 15.24L6.07 17.89L8.18 13.59L3.17 12.05L8.89 10.80L5.86 6.01L10.43 8.50Z" />
+            </svg>
+          </button>
+        )}
         {id === 'emitter-water' && (
           <button
             type="button"
             id="dock-fuego"
-            title="Antorcha: prende tus trazos"
-            aria-label="Antorcha: prende tus trazos"
+            title="Torch: set fire to your walls"
+            aria-label="Torch: set fire to your walls"
             aria-pressed="false"
           >
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -138,15 +164,15 @@ const INICIAL = PALETTES[0]!;
   <button
     type="button"
     id="dock-color"
-    title="Color de la arena"
-    aria-label="Color de la arena"
+    title="Sand colour"
+    aria-label="Sand colour"
     aria-expanded="false"
     aria-controls="dock-paletas"
   >
     <span id="dock-color-disco" style={`background:${disco(INICIAL)}`}></span>
   </button>
 
-  <div id="dock-paletas" role="group" aria-label="Paletas">
+  <div id="dock-paletas" role="group" aria-label="Palettes">
     {
       PALETTES.map((p) => (
         <button
@@ -166,7 +192,7 @@ const INICIAL = PALETTES[0]!;
     <svg viewBox="0 0 24 24" focusable="false">
       <path d="M7 7l10 10M17 7L7 17" />
     </svg>
-    <span>soltar para quitar</span>
+    <span>drop to remove</span>
   </div>
 </div>
 
@@ -247,9 +273,10 @@ const INICIAL = PALETTES[0]!;
     cursor: not-allowed;
   }
 
-  /* --- La antorcha ---------------------------------------------------------
-     Misma caja que una ficha, pero se pulsa en vez de arrastrarse. */
-  #dock-fuego {
+  /* --- Botones que no son fichas -------------------------------------------
+     Misma caja que una ficha, pero se pulsan en vez de arrastrarse. */
+  #dock-fuego,
+  #dock-reventar {
     display: grid;
     place-items: center;
     width: 44px;
@@ -262,10 +289,11 @@ const INICIAL = PALETTES[0]!;
     cursor: pointer;
     touch-action: none;
     -webkit-tap-highlight-color: transparent;
-    transition: color 160ms ease, background-color 160ms ease;
+    transition: color 160ms ease, background-color 160ms ease, opacity 200ms ease;
   }
 
-  #dock-fuego svg {
+  #dock-fuego svg,
+  #dock-reventar svg {
     width: 24px;
     height: 24px;
     fill: none;
@@ -276,10 +304,20 @@ const INICIAL = PALETTES[0]!;
   }
 
   #dock-fuego:hover,
-  #dock-fuego:focus-visible {
+  #dock-fuego:focus-visible,
+  #dock-reventar:hover,
+  #dock-reventar:focus-visible {
     color: #d6d6e0;
     background: rgba(255, 255, 255, 0.06);
     outline: none;
+  }
+
+  /* Sin bolas en el lienzo no hay nada que reventar. Mismo apagado que las
+     fichas al llegar al tope, para que "esto ahora no" se lea igual en todo el
+     dock. La antorcha no entra aqui: siempre tiene algo que hacer. */
+  #dock.sin-bolas #dock-reventar {
+    opacity: 0.3;
+    cursor: not-allowed;
   }
 
   /* Encendida. Es el unico boton del dock que deja algo activo, asi que la
@@ -428,10 +466,39 @@ const INICIAL = PALETTES[0]!;
     display: flex;
   }
 
+  /* Con siete botones el dock mide 343 px, y en un movil de 320 se salia once
+     por cada lado — la primera ficha y el disco de color quedaban cortados. No
+     hay sitio para recortar solo huecos: 44x44 por siete ya son 308. Asi que
+     por debajo de 380 los botones bajan a 40, el hueco entre fichas desaparece
+     y el separador se estrecha. Quedan pegados unos a otros, que en una barra
+     de herramientas es lo normal, y siguen siendo objetivos de dedo. */
+  @media (max-width: 380px) {
+    #dock {
+      padding: 4px;
+    }
+
+    #dock-fichas {
+      gap: 0;
+    }
+
+    .ficha,
+    #dock-fuego,
+    #dock-reventar,
+    #dock-color {
+      width: 40px;
+      height: 40px;
+    }
+
+    #dock-sep {
+      margin: 0 3px;
+    }
+  }
+
   @media (prefers-reduced-motion: reduce) {
     #dock,
     .ficha,
     #dock-fuego,
+    #dock-reventar,
     #dock-color,
     .muestra {
       transition: none;

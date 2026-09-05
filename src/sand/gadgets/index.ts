@@ -168,6 +168,11 @@ export interface Gadget {
   /** Toque sin arrastre. La bomba detona; la bola, solo si esta encendida. */
   tap?(): void;
   /**
+   * Enciende la mecha sin que nada haya estallado al lado, y sin reiniciar la
+   * de la que ya ardia. Lo unico que lo llama es el boton de reventar bolas.
+   */
+  arm?(): void;
+  /**
    * Ha estallado algo cerca.
    *
    * Cada pieza decide si le afecta y en que radio: la bola se enciende y se
@@ -236,6 +241,32 @@ export class GadgetLayer {
   /** ¿Cabe una pieza de este tipo? La bomba tiene su propio hueco. */
   roomFor(kind: GadgetKind): boolean {
     return this.count < MAX_GADGETS + (kind === 'bomb' ? BOMB_SLOT : 0);
+  }
+
+  /** Cuantas bolas hay puestas. Lo mira el dock para su boton de reventarlas. */
+  get balls(): number {
+    let n = 0;
+    for (const g of this.items) if (g instanceof Ball) n++;
+    return n;
+  }
+
+  /**
+   * Enciende la mecha de todas las bolas a la vez.
+   *
+   * No las detona: las **arma**. Una bola encendida sigue rebotando los dos
+   * segundos que arde, asi que la cadena no se resuelve donde estaba sino que
+   * se va corriendo por el lienzo — y cada una que revienta prende a las que
+   * le pillen dentro, que es lo que convierte esto en una cascada en vez de en
+   * un fogonazo. Detonarlas en el sitio seria tirar justo lo que lo hace.
+   */
+  armBalls(): number {
+    let n = 0;
+    for (const g of this.items) {
+      if (!(g instanceof Ball)) continue;
+      g.arm?.();
+      n++;
+    }
+    return n;
   }
 
   /**

@@ -226,6 +226,18 @@ export class Wick {
   }
 
   /**
+   * Enciende, pero sin tocar lo que ya estuviera ardiendo.
+   *
+   * Lo usa el boton de reventar las bolas, que es un gesto repetible: con
+   * `light()` a secas, volver a pulsarlo reinicia la mecha de las que ya
+   * contaban atras, y machacando el boton se pueden tener bolas encendidas que
+   * no revientan nunca. Un boton no puede deshacer lo que acaba de hacer.
+   */
+  arm(): void {
+    if (this.flash <= 0 && this.fuse <= 0) this.fuse = FUSE;
+  }
+
+  /**
    * Apaga mecha y anillo: la pieza vuelve a estar entera.
    *
    * Lo usa solo la fuente fija de la escena, que es la unica que no se puede

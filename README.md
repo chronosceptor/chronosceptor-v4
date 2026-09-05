@@ -72,10 +72,17 @@ Y una excepción, solo para la bomba: **tocarla la detona** sin esperar a la mec
 | **Fuente de agua** | Lo mismo, pero echando agua: boca más ancha y chorro recto en vez de cono |
 | **Antorcha** | No es una pieza y no se arrastra: se pulsa, y mientras esté encendida el puntero prende en vez de dibujar |
 | **Bola** | Rebota en los bordes, en tus paredes y contra las otras bolas, y se come la arena que toca. Cada golpe **desportilla la pared** |
+| **Reventar** | Tampoco es una pieza: enciende de golpe la mecha de todas las bolas puestas. Se apaga cuando no hay ninguna |
 | **Bomba** | Mecha de 2 s con un anillo que se vacía; revienta un radio de 63 celdas (unos 126 px) —arena, **paredes** y **cualquier pieza que pille dentro**— y se consume |
 
 Lo que echa cada fuente se decide al sacarla y no vuelve a cambiar: para pasar de arena a agua se
 quita la que hay y se pone la otra. La de serie es de arena.
+
+**El botón de reventar las arma, no las detona.** Todas las bolas encienden su mecha a la vez y
+siguen rebotando los dos segundos que arden, cada una con su aro de alcance y su cuenta atrás. Para
+cuando revientan están repartidas por otro sitio, y cada explosión prende a las que le pillen dentro:
+la cadena se va corriendo por el lienzo en vez de resolverse donde estaban. Volver a pulsarlo no
+reinicia lo que ya arde.
 
 **El fuego** sólo se lleva por delante lo que hayas dibujado tú: la arena no arde y el suelo del
 mundo tampoco. Avanza a unas 90 celdas por segundo, deja una estela encendida de medio segundo por
@@ -123,6 +130,11 @@ Sí puede inundarse si dibujas una presa que cruce toda la pantalla — es físi
 está `Clear`. Las dos últimas filas están reservadas: no se puede dibujar sobre el drenaje.
 
 El dibujo no se guarda: cada visita empieza en blanco.
+
+Los textos que se ven —rótulos del dock, nombres de las paletas— van en **inglés**, que es el idioma
+declarado de la página; el código y los comentarios siguen en castellano. Los `id` de las paletas no:
+son lo que se guarda en `localStorage`, y traducirlos devolvería a la de serie a quien ya hubiera
+elegido color.
 
 ## Parámetros de URL
 

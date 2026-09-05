@@ -192,6 +192,10 @@ export class Ball implements Gadget {
     this.wick.tap();
   }
 
+  arm(): void {
+    this.wick.arm();
+  }
+
   tick(c: TickCtx, dt: number): void {
     const g = c.grid;
 

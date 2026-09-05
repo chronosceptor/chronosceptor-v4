@@ -54,9 +54,10 @@ export function mountDock(app: SandApp, root: HTMLElement, onActivity: () => voi
     onRelease() {
       root.classList.remove('papelera');
     },
-    onCount(_count, full, onlyBomb) {
+    onCount(_count, full, onlyBomb, balls) {
       root.classList.toggle('lleno', full);
       root.classList.toggle('solo-bomba', onlyBomb);
+      root.classList.toggle('sin-bolas', balls === 0);
     },
     onTool(t) {
       marcarAntorcha(t === 'fire');
@@ -112,7 +113,7 @@ export function mountDock(app: SandApp, root: HTMLElement, onActivity: () => voi
   function marcarAntorcha(on_: boolean): void {
     if (!antorcha) return;
     antorcha.setAttribute('aria-pressed', String(on_));
-    const rotulo = on_ ? 'Antorcha encendida: prende tus trazos' : 'Antorcha: prende tus trazos';
+    const rotulo = on_ ? 'Torch on: set fire to your walls' : 'Torch: set fire to your walls';
     antorcha.title = rotulo;
     antorcha.setAttribute('aria-label', rotulo);
   }
@@ -123,6 +124,23 @@ export function mountDock(app: SandApp, root: HTMLElement, onActivity: () => voi
       // El marcado lo pone `onTool`, no esta linea: la antorcha tambien se
       // apaga sola al sacar una ficha o al vaciar, y con dos caminos para el
       // mismo estado uno de los dos acaba mintiendo.
+      onActivity();
+    });
+  }
+
+  // --- Reventar las bolas ---------------------------------------------------
+  //
+  // Las **arma**, no las detona: enciende su mecha y cada una sigue rebotando
+  // los dos segundos que arde. La cadena se va corriendo por el lienzo en vez
+  // de resolverse donde estaban, que es toda la gracia.
+  //
+  // Se apaga cuando no hay ninguna bola puesta. Un boton que no puede hacer
+  // nada tiene que decirlo antes de que lo pulsen, no despues.
+  const reventar = root.querySelector<HTMLButtonElement>('#dock-reventar');
+  if (reventar) {
+    on(reventar, 'click', () => {
+      if (root.classList.contains('sin-bolas')) return;
+      app.armBalls();
       onActivity();
     });
   }

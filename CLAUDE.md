@@ -37,12 +37,11 @@ La justificación de fondo de cada decisión de física está en el README, secc
   con no editar. Antes de medir nada, navegar de nuevo a la página (una URL con parámetro
   distinto obliga a la carga) y no tocar archivos hasta acabar. Confirmación rápida de que
   el entorno está limpio: un gesto debe dejar `inspect().piezas` en exactamente 1.
-- **El overlay de error de Vite se traga los eventos de puntero y no lo parece.** El servidor
-  de desarrollo lanza `UnhandledRejection: Could not establish a connection to the Netlify
-  Edge Functions local development server` y pinta un `<vite-error-overlay>` a pantalla
-  completa con `z-index: 99999`. La página sigue corriendo por debajo —`fabrica.inspect()`
-  responde con normalidad— pero ningún clic ni arrastre llega al canvas: un trazo de
-  Playwright dejó `paredes 0` sin ningún error. Cura antes de medir nada con el ratón:
+- **El overlay de error de Vite se traga los eventos de puntero y no lo parece.** El servidor de
+  desarrollo pinta un `<vite-error-overlay>` a pantalla completa con `z-index: 99999` (el error es
+  del dev server de Netlify Edge Functions). La página sigue corriendo por debajo —`inspect()`
+  responde— pero ningún clic llega al canvas: un trazo de Playwright dejó `paredes 0` sin error
+  ninguno. Cura antes de medir con el ratón:
   `document.querySelectorAll('vite-error-overlay').forEach(o => o.remove())`.
 - **Una captura de elemento de Playwright sobre algo que se mueve solo cuelga el servidor MCP
   entero, no solo esa llamada.** Pasó con `#dock`, que se autooculta: nunca llegó a estar "quieto"
@@ -61,23 +60,22 @@ La justificación de fondo de cada decisión de física está en el README, secc
 - **Para medir sin `dump()`: `getImageData` sobre `#arena`.** El canvas es del tamaño del grid —un
   píxel por celda— y alfa > 0 marca celda ocupada. Una fila entera cuesta
   `ctx.getImageData(0, y, gw, 1)` y sale directa la lista de x del chorro.
-- **Un fotograma suelto del chorro engaña: parece granos sueltos.** A 1.575 granos/s cada fila del
-  chorro tiene un puñado de granos en un instante dado, y el ojo no ve eso, ve la estela. Para
-  juzgar la forma hay que componer ~24 fotogramas seguidos en un canvas auxiliar con
-  `globalAlpha = 0.5` dentro de un bucle de `requestAnimationFrame`: eso da la envolvente, que es
-  lo que se ve de verdad. Con el fotograma suelto estuve a punto de dar por malo un cono que en
-  pantalla se lee perfectamente.
+- **Un fotograma suelto del chorro engaña: parece granos sueltos.** El ojo ve la estela, no el
+  instante. Para juzgar la forma hay que componer ~24 fotogramas en un canvas auxiliar con
+  `globalAlpha = 0.5` dentro de un bucle de `rAF`: eso da la envolvente. Con el fotograma suelto
+  estuve a punto de dar por malo un cono que en pantalla se lee perfectamente.
 - **El navegador del MCP no siempre corre a la misma velocidad** (`inspect().fps` lo dice). Una vez
   iba a ~5 fps y la arena se acumulaba cinco veces más despacio que en pantalla: 349 granos tras
   11 s me hicieron sospechar del emisor cuando no pasaba nada. Otra sesión entera fue a 120. Mira
   `fps` antes de interpretar cualquier serie temporal, y no des por buena ninguna de las dos cifras.
-- **Una medida de varios minutos se hace con un `setInterval` dentro de la página, no esperando en
-  la llamada.** Un `browser_evaluate` largo tumba el navegador (ver arriba), así que la serie se
-  acumula sola en un global —`window.__m = {s: []}` y un `setInterval` que apunta `inspect()` cada
-  15 s— y se recoge después con llamadas de un par de segundos. Para dejar pasar el tiempo entre
-  recogidas, un `sleep` en Bash **en segundo plano**; en primer plano está bloqueado. Así se midió
-  un llenado de 7 minutos sin una sola llamada larga. Y no edites ningún archivo mientras corre: el
-  HMR reinicia la escena y la serie deja de significar nada.
+  Y no es sólo el caudal: **el reloj de la simulación se queda atrás del real** —el bucle da tres
+  pasos por fotograma como mucho—, así que a 5 fps una mecha de 2 s tarda diez en pantalla. Di por
+  roto el botón de reventar bolas por esto; las bolas reventaron, tarde.
+- **Una medida larga se hace con un `setInterval` dentro de la página, no esperando en la llamada.**
+  Un `browser_evaluate` largo tumba el navegador (ver arriba): la serie se acumula sola en un global
+  —`window.__m = {s: []}` y un `setInterval` que apunta `inspect()`— y se recoge después con llamadas
+  cortas. Para dejar pasar el tiempo, un `sleep` en Bash **en segundo plano**. Y no edites ningún
+  archivo mientras corre: el HMR reinicia la escena y la serie deja de significar nada.
 - **`astro preview` no funciona con el adaptador de Netlify** (el proceso muere antes de
   escuchar), así que no hay forma fácil de medir contra un build de producción.
 - **Verifica que una edición aterrizó antes de medir nada.** Dos reemplazos de texto con
@@ -98,14 +96,11 @@ La justificación de fondo de cada decisión de física está en el README, secc
   en el aire y aparecen huecos negros de la nada.
 - **Instantáneas no miden caudal.** Contar granos por zona en un sistema en flujo da
   deltas negativos sin sentido; hay que hacer series temporales.
-- **Para medir el chorro hay que hacer `clear()` primero y medir en el primer segundo.**
-  Con la escena llena, el cono llega hasta la boquilla y las filas de abajo miden el
-  montón, no el chorro: salieron anchos de 12 y 18 celdas que eran del cono y me hicieron
-  creer que un cambio funcionaba mucho mejor de lo que funcionaba. Y el ancho **mín-máx de
-  una fila no sirve** — lo fijan dos granos sueltos y sale plano pase lo que pase. Lo que
-  se ve es la desviación típica de la x de los granos de esa fila. Y esa σ hay que **acumularla
-  sobre ~90 fotogramas**: en uno solo la fila trae 4-11 granos y el número salta entre 5,8 y 12,3 px
-  sin que haya cambiado nada.
+- **Para medir el chorro hay que hacer `clear()` primero y medir en el primer segundo.** Con la
+  escena llena, las filas de abajo miden el montón y no el chorro. Y el ancho **mín-máx de una fila
+  no sirve** —lo fijan dos granos sueltos—: lo que se ve es la desviación típica de la x, acumulada
+  sobre ~90 fotogramas. En uno solo la fila trae 4-11 granos y el número salta de 5,8 a 12,3 px sin
+  que haya cambiado nada.
 - **Una medida con la bola dentro es ruidosa: su trayectoria es aleatoria.** El mismo
   cuenco, la misma bola y los mismos 12 s dieron 46, 61 y 42 celdas de pared destruidas.
   Hacen falta tres pasadas para que la media signifique algo, y aun así no da para afinar
@@ -143,10 +138,8 @@ La justificación de fondo de cada decisión de física está en el README, secc
   fracción de las celdas del lienzo (`SAND_CAP`, en `world.ts`), y como número absoluto dejaba de
   ser una red de seguridad en cuanto la pantalla era grande. No lo vuelvas a fijar.
 - **Para llenar el lienzo deprisa, fuentes repartidas a lo ancho — apiladas en el mismo eje se
-  ahogan entre ellas.** Cada una solo puede sembrar en las celdas libres de su cono, y dos conos en
-  la misma columna se pelean por las mismas: cinco en fila vertical daban 680 granos/s, menos que
-  la de serie sola. Seis repartidas a lo ancho dan 8.200/s y llenan hasta el disparo del drenaje en
-  40 s en vez de en varios minutos.
+  ahogan entre ellas.** Cada una solo siembra en las celdas libres de su cono, y dos conos en la
+  misma columna se pelean por las mismas: cinco en vertical dan menos caudal que la de serie sola.
 - **El techo de arena no lo pone ningún parámetro: lo pone el cono.** Con la fuente de serie —una
   sola y central— el montón acaba tapando la boquilla y el caudal se ahoga: 140.000 granos a los 7
   minutos y el drenaje, que dispara en 219.000, **no llega a abrir nunca**. Con siete fuentes
@@ -157,34 +150,31 @@ La justificación de fondo de cada decisión de física está en el README, secc
   de la `ejecta`, `BLAST_R`, el cuerpo y el agarre de la bomba, el radio de la bola, `TAP_CELLS`,
   `BADGE_R`: todas están escritas para el grano de serie y hubo que rehacerlas **a mano** al pasar
   de 3 a 2. Si vuelves a mover `cell` de verdad, hay que rehacer los dos grupos.
-- **`?cell=N` sirve para juzgar la ARENA, no las piezas.** Reescala el perfil al vuelo para comparar
-  granos en la misma sesión (`?cell=3` es a ojo el grano grueso de antes), pero por lo anterior deja
-  la bola, la explosión y los agarres al tamaño de serie. Una comparación de piezas hecha con
-  `?cell=` no vale.
+- **`?cell=N` sirve para juzgar la ARENA, no las piezas.** Reescala el perfil al vuelo, pero por lo
+  anterior deja la bola, la explosión y los agarres al tamaño de serie: una comparación de piezas
+  hecha con `?cell=` no vale.
 - **La fuente no se dibuja, y no es que se le haya olvidado.** No hay tolva, ni PNG, ni trazo: en
   reposo `Emitter.draw` no pinta nada y lo único que se ve es la arena saliendo. Tuvo un dibujo con
   `SPOUT_FRAC`, `SOLAPE` y `NOZZLE_SPRITE_ROWS` detrás, y está entero en el historial. No lo
   reintroduzcas por tu cuenta; el porqué está en el README.
 - **El chorro nace en un vértice de una celda y se abre en `SPREAD_ROWS` filas** (51, en `world.ts`).
   Cada grano sortea una fila del cono y **baja hasta encontrar hueco**: sin ese descenso el vértice
-  sale punteado —es de una celda, se satura, y lo que no cabe se pierde— y además cae el caudal. Si
-  tocas la siembra, mide las dos cosas: el ancho por fila y los granos/s de verdad.
+  se satura y sale punteado, y cae el caudal. Si tocas la siembra, mide las dos cosas: el ancho por
+  fila y los granos/s de verdad.
 - **La forma del cono la manda `Source.halfAt`, y la usan dos sitios.** La siembra y el contorno que
   se pinta al arrastrar la fuente salen los dos de ahí. Si calculas la forma aparte en el render,
   acabarás prometiendo un cono por donde la arena no sale.
 - **`SPREAD_ROWS` no es solo estética: es también la altura de la caja de agarre.** Alargar el cono
   se come sitio de dibujo alrededor del chorro. Es una perilla de gusto y está calibrada: el cono
   tiene que abrirse casi todo el rato que se ve, que es lo que se lee como que crece.
-- **La fuente se agarra por una caja (`grabBox`), no por un radio.** Es la única pieza que no tiene
-  cuerpo dibujado y que cuelga entera por debajo de su centro —su `cy` es el vértice del que cae la
-  arena—, así que un círculo centrado ahí prometería un objetivo que no es el que se ve. El aro de
-  señalado y la × de quitar salen de la misma caja; si añades otra pieza descentrada, hazlo igual o
+- **La fuente se agarra por una caja (`grabBox`), no por un radio.** Cuelga entera por debajo de su
+  centro —su `cy` es el vértice del que cae la arena—, así que un círculo centrado ahí señalaría lo
+  que no es. El aro y la × salen de la misma caja: si añades otra pieza descentrada, hazlo igual o
   las tres cosas dejarán de coincidir.
 - **La pista que se ve al arrastrar una fuente va en `inkBright` y sólida, no en el tono de la
-  maquinaria.** Es diagonal, así que el antialias ya la reparte a medio tono entre dos píxeles, y el
-  fantasma del dock encima va al 55% de opacidad: en `structureLine`, a un píxel y a rayas, quedaba
-  en un gris casi igual al fondo. Y las rayas las pone quien llama —el fantasma se pinta a rayas
-  cuando la pieza **no** cabe—, así que `drawJetHint` no debe tocar el `setLineDash`.
+  maquinaria.** Es diagonal y el fantasma va al 55%: en `structureLine`, a un píxel, quedaba en un
+  gris casi igual al fondo. Y las rayas las pone quien llama —el fantasma va a rayas cuando la pieza
+  **no** cabe—, así que `drawJetHint` no debe tocar el `setLineDash`.
 - **Una pieza colocada desde el dock hay que desmarcarla (`held = false`) en `endPlacement`.** El
   fantasma nace `held` para que la fuente enseñe su cono mientras lo llevas, y nada más lo apaga: el
   `held` de una pieza agarrada lo quita el soltarla, y el fantasma no pasa por ahí. Se quedaba con
@@ -193,11 +183,20 @@ La justificación de fondo de cada decisión de física está en el README, secc
   ficha: la antorcha.** Hubo una cruz giratoria y una plataforma, y se quitaron enteras aunque
   funcionaban (commit `b52c517`, con lo último que llegaron a hacer: colocación en dos tiempos y
   trayecto inclinado). No las reintroduzcas por tu cuenta.
-- **La antorcha va dentro de `#dock-fichas` pero SIN la clase `.ficha`, y no es un descuido.**
-  `.ficha` es lo que atenúan `#dock.lleno` y `#dock.solo-bomba`, y el fuego no ocupa plaza: al
-  contrario, es otra forma de hacer sitio. Está dentro del grupo porque los tres iconos que eligen
-  qué le echas al lienzo tienen que verse juntos, y escrito en el orden en que se ve —con `order` de
-  flex el tabulador iría por otro sitio—.
+- **El botón de reventar bolas las ARMA, no las detona.** `GadgetLayer.armBalls()` enciende la mecha
+  de cada una; siguen rebotando los dos segundos que arden y la cadena se va corriendo. Detonarlas en
+  el sitio sería tirar justo lo que lo hace. Y usa `Wick.arm()` y no `light()`: `light()` reinicia la
+  mecha de la que ya ardía, así que machacando el botón se tienen bolas encendidas que no revientan
+  nunca.
+- **El dock mide 343 px con siete botones y eso NO cabe en un móvil de 320.** Se salía once píxeles
+  por lado y cortaba la primera ficha y el disco de color. Hay un `@media (max-width: 380px)` que
+  baja los botones a 40 px, quita el hueco entre fichas y estrecha el separador. Si añades un octavo
+  botón, mídelo a 320 antes de darlo por bueno — no hay margen.
+- **La antorcha y el botón de reventar van dentro de `#dock-fichas` pero SIN la clase `.ficha`, y no
+  es un descuido.** `.ficha` es lo que atenúan `#dock.lleno` y `#dock.solo-bomba`, y ninguno de los
+  dos ocupa plaza. Están dentro del grupo por sitio —los tres iconos de «qué le echo al lienzo»
+  juntos, y el estallido entre la bola y la bomba— y escritos en el orden en que se ven: con `order`
+  de flex el tabulador iría por otro lado. El de reventar sí se apaga solo, con `#dock.sin-bolas`.
 - **El material ya NO es global: lo lleva cada fuente y se fija al colocarla.** `TickCtx.material`
   ya no existe y `Emitter.tick` no lo pisa cada paso. `fabrica.setEmitMaterial` sigue ahí pero cambia
   sólo **la fuente de serie**; es una ayuda de consola para medir agua sin arrastrar una ficha.
@@ -214,10 +213,18 @@ La justificación de fondo de cada decisión de física está en el README, secc
   bandera `porFuego`, rozar una bola con la antorcha la reventaba a los 0,75 s en vez de dejarla
   arder los dos segundos. A la bomba sí hay que precipitarla, y ese caso lo cubre la misma bandera
   (nace encendida por su cuenta, no por el fuego).
-- **El botón de color vive fuera de `#dock-fichas`, y es a propósito.** No se arrastra, y las reglas
-  de `#dock.lleno` / `#dock.solo-bomba` apagan `.ficha`: dentro, se habría apagado con el lienzo al
-  tope. El panel de paletas se posiciona contra `#dock`, que es bloque contenedor de sus hijos
-  absolutos por su `transform` aunque él mismo esté desplazado.
+- **Los textos que se ven van en INGLÉS; el código y los comentarios, en castellano.** La página se
+  sirve con `lang="en"` y sus metadatos ya estaban en inglés, así que el dock era lo único que
+  desentonaba. Si añades un botón, su `title`/`aria-label` va en inglés.
+- **Los `id` de las paletas siguen en castellano (`ocre`, `oceano`…) y NO se tocan.** Es lo que hay
+  guardado en `localStorage['chronosceptor:paleta']`: traducirlos devolvería a la paleta de serie a
+  todo el que ya hubiera elegido color. Lo que se ve es el `name`, y ése sí está en inglés.
+- **El overlay de `?debug=1` se queda en castellano.** Es un instrumento de desarrollo y hace pareja
+  con las claves de `inspect()` (`agua`, `mojada`, `piezas`, `donde`, `perdidos`, `fuego`), que están
+  documentadas así en el README. Traducir sólo la mitad del par sería peor que no traducir ninguna.
+- **El botón de color vive fuera de `#dock-fichas`, y es a propósito.** El panel de paletas se
+  posiciona contra `#dock`, que es bloque contenedor de sus hijos absolutos por su `transform`
+  aunque él mismo esté desplazado.
 - **Para comprobar tipos sin disparar el HMR: `npx tsc --noEmit -p tsconfig.json`.** `astro check`
   regenera `.astro/types.d.ts` y eso recarga la página (ver arriba); `tsc` a secas no toca nada.
 - **Editar un archivo mientras se mide deja módulos a medias en el servidor.** Sale un
