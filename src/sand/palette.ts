@@ -106,6 +106,18 @@ export const THEME = {
   structureSoft: '#393942',
   ink: '#6E6E78',
   inkBright: '#B4B4C0',
+  /**
+   * Llama viva. El unico color saturado del tema, que por lo demas es todo
+   * grises sobre `#0B0B0C`.
+   *
+   * Se permite porque es transitorio y pequeno —una banda de unas doscientas
+   * celdas que avanza y se apaga—, nunca un velo ni un halo por encima del
+   * lienzo: eso apagaria el color de la arena, que es lo unico saturado que
+   * tiene que haber en el cuadro.
+   */
+  fire: '#FF8A3D',
+  /** Brasa: la misma llama ya consumiendose. */
+  ember: '#C2410C',
 } as const;
 
 /**

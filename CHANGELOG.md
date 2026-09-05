@@ -23,13 +23,28 @@ versionado según [SemVer](https://semver.org/lang/es/).
   suelta. El secado vive en `moisture.ts`, un barrido amortizado que recorre la rejilla entera una
   vez por segundo: es el único sitio del proyecto que toca celdas dormidas, porque si el secado
   viviera en el autómata un montón de lodo se dormiría entero y no volvería a secarse jamás.
-- **Un interruptor en el dock, junto al del color, para cambiar entre arena y agua.** Afecta a todas
-  las fuentes a la vez y entra en el fotograma siguiente, sin repintar nada de lo ya caído — igual
-  que la paleta, y por la misma razón: lo que se ve en el lienzo es historia y no estado. No se
-  guarda entre visitas; abrir la página y que caiga agua sin haberlo pedido se leería como un fallo.
-- **`inspect()` trae `agua` y `mojada`**, y `dump()` saca `~` para el agua y la arena mojada en
-  mayúscula. Sin esa mayúscula no hay forma de ver por dónde va el frente de mojado, que es lo
-  primero que hace falta mirar cuando el lodo no se comporta.
+- **Dos fichas de fuente en el dock, una de arena y otra de agua.** Lo que echa un chorro se decide
+  al sacarlo y no vuelve a cambiar, así que dos fuentes pueden estar echando cosas distintas a la
+  vez — que es lo que hace falta para apagar con una lo que alimenta la otra. La de serie es de
+  arena. Los iconos las nombran por lo que echan y no por la pieza: una duna y una gota, porque el
+  chorro es el mismo en las dos y un cono de granos y uno de gotas se parecen demasiado a 24
+  píxeles.
+- **La antorcha: se le puede prender fuego al dibujo.** Es un botón del dock, y mientras esté
+  encendida el puntero deja de dibujar y pasa a encender. El trazo que toques arde como una mecha a
+  unas 90 celdas por segundo, deja una estela encendida de medio segundo por detrás del frente, se
+  consume y desaparece — y lo que aguantaba encima se desploma. **No salta huecos**: un trazo
+  partido corta la mecha, así que un cortafuegos dibujado a tiempo significa algo. **El agua y el
+  lodo lo apagan**, y la pared que salvan se queda entera. Sólo arde lo que hayas dibujado tú: la
+  arena no arde y el suelo del mundo tampoco. Y enciende **cualquier pieza que toque**, con la misma
+  mecha de dos segundos que reparten las explosiones: la bola sale corriendo ardiendo, la fuente
+  revienta, y a una bomba —que ya venía encendida— la precipita en el acto. Se apaga volviendo a
+  pulsarla, sacando cualquier ficha o vaciando el lienzo, y el clic derecho sigue borrando mientras
+  tanto. Medido: un trazo de 726 celdas de largo por tres de grosor arde entero en 9 s sin perder
+  un solo grano, y dos trazos separados por 30 celdas se quedan en que arde sólo el prendido.
+- **`inspect()` trae `agua`, `mojada` y `fuego`**, y `dump()` saca `~` para el agua, la arena mojada
+  en mayúscula y `*` para la pared que arde. Sin esos glifos no hay forma de ver por dónde va el
+  frente de mojado ni el del fuego, que es lo primero que hace falta mirar cuando no se comportan.
+  Desde la consola, `fabrica.setTool('fire' | 'draw')` enciende y apaga la antorcha.
 
 ### Changed
 
@@ -40,6 +55,12 @@ versionado según [SemVer](https://semver.org/lang/es/).
   densidad de caída, así que el chorro no tiene borde. La boca va la mitad más ancha que la de la
   arena, y eso es caudal y no gusto: con el semiancho de la arena salían 830 celdas/s y con el
   ensanche 1.097, contra las 1.509 de la arena.
+- **Lo que siembra una fuente es suyo y no de la escena.** Llegó a haber un interruptor global que
+  las pasaba todas a agua o a arena de golpe; con una ficha de cada eran dos sitios diciendo lo
+  mismo, y colocabas una de arena y el interruptor la volvía de agua sin haberla tocado. Se pierde
+  poder cambiar de material sin volver a colocar; se gana que un chorro siga echando lo que
+  prometía su icono. `fabrica.setEmitMaterial` sigue existiendo pero ahora cambia sólo la fuente de
+  serie, como ayuda de consola.
 - **El drenaje y el tope de celdas cuentan la suma de arena y agua** (`Grid.ocupadas`). Contando
   solo arena, un chorro de agua llenaría el lienzo sin que nada lo frenara.
 - **La bola se come también el agua.** Mirando solo la arena dejaba dentro de sí misma un disco de

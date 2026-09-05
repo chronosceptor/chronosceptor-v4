@@ -1,4 +1,4 @@
-import type { GadgetKind, SandApp } from './index';
+import type { EmitMaterial, GadgetKind, SandApp } from './index';
 import { paletteById } from './palette';
 
 /** Donde se guarda la paleta elegida. */
@@ -7,9 +7,15 @@ const CLAVE = 'chronosceptor:paleta';
 /**
  * Cablea el dock con el lienzo.
  *
- * Tres gestos y ninguno mas: arrastrar una ficha coloca, arrastrar una pieza la
- * mueve, y soltarla sobre el dock la quita. No hay modo seleccionado ni
- * herramienta activa, asi que no hay nada que recordar entre gesto y gesto.
+ * Tres gestos: arrastrar una ficha coloca, arrastrar una pieza la mueve, y
+ * soltarla sobre el dock la quita.
+ *
+ * Y una sola herramienta activa, la antorcha, que es la excepcion a la regla
+ * que regia esto —no habia nada seleccionado y todo gesto hacia siempre lo
+ * mismo—. El fuego no cabia en ese esquema: no es una pieza que se coloque ni
+ * algo que caiga, es lo que hace el puntero. Se apaga sola en cuanto se saca
+ * una ficha o se vacia el lienzo, que es lo que evita que se quede encendida
+ * sin que nadie se acuerde.
  *
  * El puntero lo captura la ficha, no el canvas, asi que mientras se coloca una
  * pieza el lienzo no ve un solo evento: por eso la posicion del fantasma se le
@@ -52,6 +58,9 @@ export function mountDock(app: SandApp, root: HTMLElement, onActivity: () => voi
       root.classList.toggle('lleno', full);
       root.classList.toggle('solo-bomba', onlyBomb);
     },
+    onTool(t) {
+      marcarAntorcha(t === 'fire');
+    },
   });
 
   for (const chip of chips) {
@@ -68,7 +77,9 @@ export function mountDock(app: SandApp, root: HTMLElement, onActivity: () => voi
       } catch {
         /* sin captura: el arrastre sigue mientras no salga de la ficha */
       }
-      app.beginPlacement(kind);
+      // La fuente sale en dos sabores y son dos fichas distintas: lo que
+      // siembra cada chorro se decide aqui y no vuelve a cambiar.
+      app.beginPlacement(kind, chip.dataset.material as EmitMaterial | undefined);
       app.movePlacement(e.clientX, e.clientY);
     });
 
@@ -86,25 +97,32 @@ export function mountDock(app: SandApp, root: HTMLElement, onActivity: () => voi
     on(chip, 'pointercancel', () => app.cancelPlacement());
   }
 
-  // --- Que cae: arena o agua ------------------------------------------------
+  // --- La antorcha ----------------------------------------------------------
   //
-  // Es un interruptor de la escena, no una herramienta: cambia lo que siembran
-  // todas las fuentes a la vez y entra en el fotograma siguiente, sin repintar
-  // nada de lo que ya cayo. Igual que la paleta — y por la misma razon, que es
-  // que lo que se ve en el lienzo es historia y no estado.
+  // El unico boton del dock que deja algo encendido. No consulta `lleno` ni
+  // `solo-bomba` —y su marcado no lleva la clase `.ficha`, que es la que se
+  // atenua— porque el fuego no ocupa ninguna de las diez plazas: al contrario,
+  // es otra forma de hacer sitio, como la bomba.
   //
-  // No se guarda en localStorage a proposito. La paleta si, porque es una
-  // preferencia de aspecto; abrir la pagina y que caiga agua sin haberlo pedido
-  // se leeria como que algo se ha roto.
-  const material = root.querySelector<HTMLButtonElement>('#dock-material');
-  if (material) {
-    on(material, 'click', () => {
-      const agua = app.emitMaterial !== 'water';
-      app.setEmitMaterial(agua ? 'water' : 'sand');
-      material.setAttribute('aria-pressed', String(agua));
-      const rotulo = agua ? 'Cae agua' : 'Cae arena';
-      material.title = rotulo;
-      material.setAttribute('aria-label', rotulo);
+  // Tampoco se guarda en localStorage. La paleta si, porque es una preferencia
+  // de aspecto; abrir la pagina con la antorcha encendida se descubriria
+  // quemando el primer trazo que dibujas.
+  const antorcha = root.querySelector<HTMLButtonElement>('#dock-fuego');
+
+  function marcarAntorcha(on_: boolean): void {
+    if (!antorcha) return;
+    antorcha.setAttribute('aria-pressed', String(on_));
+    const rotulo = on_ ? 'Antorcha encendida: prende tus trazos' : 'Antorcha: prende tus trazos';
+    antorcha.title = rotulo;
+    antorcha.setAttribute('aria-label', rotulo);
+  }
+
+  if (antorcha) {
+    on(antorcha, 'click', () => {
+      app.setTool(app.tool === 'fire' ? 'draw' : 'fire');
+      // El marcado lo pone `onTool`, no esta linea: la antorcha tambien se
+      // apaga sola al sacar una ficha o al vaciar, y con dos caminos para el
+      // mismo estado uno de los dos acaba mintiendo.
       onActivity();
     });
   }

@@ -1,6 +1,19 @@
 import type { Point } from './draw';
 
-export type StrokeMode = 'draw' | 'erase' | 'gadget';
+export type StrokeMode = 'draw' | 'erase' | 'gadget' | 'fire';
+
+/**
+ * La herramienta activa.
+ *
+ * Es el primer modo que tiene esta escena, y va contra la regla que la venia
+ * rigiendo: no habia herramienta activa, todo gesto hacia siempre lo mismo y el
+ * contexto decidia si dibujaba o borraba. El fuego no cabe en ese esquema —no
+ * es una pieza que se coloque ni algo que caiga, es lo que hace el puntero— y
+ * la alternativa era inventarle un gesto que hubiera que aprender. Se paga con
+ * un boton que hay que acordarse de apagar; a cambio, prender es el mismo gesto
+ * con raton y con dedo.
+ */
+export type Tool = 'draw' | 'fire';
 
 export interface InputHooks {
   /** Pixeles CSS del elemento a coordenadas de celda. */
@@ -11,6 +24,10 @@ export interface InputHooks {
   paint(from: Point, to: Point, erase: boolean): void;
   /** ¿Hay una pieza bajo esta celda? Tiene prioridad sobre el trazo. */
   hasGadget?(cell: Point): boolean;
+  /** La herramienta activa. Sin esto, siempre se dibuja. */
+  tool?(): Tool;
+  /** Prende el segmento entre dos celdas: la antorcha. */
+  ignite?(from: Point, to: Point): void;
   /** Agarra la pieza que hay en esta celda. */
   grab?(cell: Point): void;
   /** Arrastra la pieza agarrada. Las coordenadas de pantalla son para la papelera. */
@@ -94,6 +111,20 @@ export class Input {
     this.origin = cell;
     this.originT = performance.now();
 
+    // La antorcha gana a todo lo demas, incluido el agarre de piezas: tocar una
+    // bomba con fuego tiene que detonarla, no arrastrarla. El boton derecho se
+    // queda fuera a proposito — sigue borrando aunque la antorcha este
+    // encendida, y es la salida de emergencia por si te has quedado atrapado
+    // prendiendo lo que querias borrar.
+    if (e.button !== 2 && this.hooks.tool?.() === 'fire') {
+      this.mode = 'fire';
+      this.active = true;
+      this.last = cell;
+      this.capture(e);
+      this.hooks.ignite?.(cell, cell);
+      return;
+    }
+
     // Una pieza colocada gana al trazo: si el gesto empieza encima de una, lo
     // que se quiere es moverla, no dibujar una pared sobre ella. Es la unica
     // decision nueva del gesto; todo lo de abajo sigue igual que antes.
@@ -150,11 +181,15 @@ export class Input {
     // trazos rapidos aunque se interpole.
     const points = e.getCoalescedEvents?.() ?? [];
     const seq = points.length > 0 ? points : [e];
+    const fuego = this.mode === 'fire';
     const erase = this.mode === 'erase';
 
     for (const p of seq) {
       const cell = this.local(p as PointerEvent);
-      if (this.last) this.hooks.paint(this.last, cell, erase);
+      if (this.last) {
+        if (fuego) this.hooks.ignite?.(this.last, cell);
+        else this.hooks.paint(this.last, cell, erase);
+      }
       this.last = cell;
     }
   }

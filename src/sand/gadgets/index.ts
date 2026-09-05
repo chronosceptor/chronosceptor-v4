@@ -7,7 +7,8 @@ import { Emitter } from './emitter';
 import { Ball, resolveBallCollisions } from './ball';
 
 /**
- * Las tres piezas del dock.
+ * Las tres clases de pieza. En el dock son cuatro fichas, porque la fuente sale
+ * en dos sabores —arena y agua— que son la misma clase con distinto material.
  *
  * Hubo dos mas —una cruz giratoria que aventaba la arena y una bandeja que la
  * paseaba por un trayecto— y se quitaron enteras. No fallaban: hacian lo que
@@ -33,18 +34,24 @@ export type GadgetKind = 'bomb' | 'emitter' | 'ball';
  *
  * `k` es la finura del grano (`Profile.k`), y le importa a la fuente por la
  * razon contraria: lo suyo si esta escrito en celdas.
+ *
+ * `material` es lo que va a sembrar una fuente, y se elige aqui porque se
+ * elige al colocarla: hay una ficha de arena y una de agua, y lo que sale de
+ * cada chorro es suyo para siempre. Hubo un interruptor de escena que las
+ * cambiaba todas a la vez y pisaba esto en cada paso; con dos fichas, decidirlo
+ * dos veces solo daba para contradecirse.
  */
 export function createGadget(
   kind: GadgetKind,
   cx: number,
   cy: number,
-  env?: { gridW?: number; k?: number },
+  env?: { gridW?: number; k?: number; material?: number },
 ): Gadget {
   switch (kind) {
     case 'bomb':
       return new Bomb(cx, cy);
     case 'emitter':
-      return new Emitter(cx, cy, undefined, env?.k);
+      return new Emitter(cx, cy, undefined, env?.k, env?.material);
     case 'ball':
     default:
       return new Ball(cx, cy, env?.gridW);
@@ -57,6 +64,16 @@ export interface Blast {
   y: number;
   /** Radio de la explosion, en celdas. */
   r: number;
+  /**
+   * No es una onda: es una celda ardiendo tocando la pieza.
+   *
+   * Cambia una sola cosa, pero importante. Una onda que pilla algo ya encendido
+   * lo precipita —la cascada de bombas—, y el fuego toca a la misma pieza en
+   * cada fotograma mientras la llama siga ahi: sin distinguirlos, rozar una
+   * bola con la antorcha la reventaba en 0,15 s en vez de dejarla arder los dos
+   * segundos, que es justo lo que hay que ver.
+   */
+  fire?: boolean;
 }
 
 /** Lo que una pieza recibe en cada paso de simulacion. */
@@ -65,8 +82,6 @@ export interface TickCtx {
   /** Arena balistica: la bomba lanza aqui, y aqui van los granos que no caben. */
   ejecta: Ejecta;
   palette: Palette;
-  /** Que siembran las fuentes en este paso: `SAND` o `WATER`. Es global. */
-  material: number;
   rand: () => number;
   /** Granos que aun caben antes del tope de arena viva. Lo reparte el emisor. */
   budget: number;
@@ -279,6 +294,19 @@ export class GadgetLayer {
     if (balls.length > 1) resolveBallCollisions(balls);
 
     if (this.items.some((g) => g.dead)) this.items = this.items.filter((g) => !g.dead);
+  }
+
+  /**
+   * Una celda acaba de prenderse: lo que la toque se enciende.
+   *
+   * Reutiliza tal cual la mecha de las explosiones, con radio cero. `Wick`
+   * mide contra el CUERPO de la pieza y no contra su centro, asi que un radio
+   * de cero significa exactamente lo que hace falta aqui: que la llama la este
+   * tocando. Y no pasa por `blasts` a proposito — ese es el cuaderno de las
+   * explosiones del paso, y una celda de pared ardiendo no lo es.
+   */
+  spark(x: number, y: number): void {
+    for (const g of this.items) g.ignite?.({ x, y, r: 0, fire: true });
   }
 
   draw(d: DrawCtx): void {

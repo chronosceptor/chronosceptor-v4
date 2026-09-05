@@ -198,6 +198,17 @@ export type WickStep =
 export class Wick {
   private fuse = 0;
   private flash = 0;
+  /**
+   * La encendio el fuego y no una onda ni su propio temporizador.
+   *
+   * El fuego toca a la pieza en todos los fotogramas que la llama siga a su
+   * lado, asi que sin acordarse de esto cada roce contaria como un aviso nuevo
+   * y la precipitaria: una bola rozada con la antorcha reventaba en 0,15 s. A
+   * una bomba si tiene que precipitarla —nace encendida por su cuenta y que la
+   * llama la alcance es exactamente lo que se espera que la haga estallar—, y
+   * ese caso lo separa esta bandera y no un caso especial de la bomba.
+   */
+  private porFuego = false;
 
   /** Ardiendo ahora mismo. */
   get lit(): boolean {
@@ -226,6 +237,7 @@ export class Wick {
   revive(): void {
     this.fuse = 0;
     this.flash = 0;
+    this.porFuego = false;
   }
 
   /** Acorta lo que quede de mecha. Nunca la alarga. */
@@ -257,8 +269,14 @@ export class Wick {
     const dy = cy - b.y;
     const r = b.r + bodyR;
     if (dx * dx + dy * dy > r * r) return;
+    // Al fuego que ya la encendio no se le vuelve a hacer caso: sigue siendo la
+    // misma llama, no un aviso nuevo.
+    if (b.fire && this.porFuego) return;
     if (this.fuse > 0) this.hurry(SYMPATHY);
-    else this.fuse = FUSE;
+    else {
+      this.fuse = FUSE;
+      this.porFuego = b.fire === true;
+    }
   }
 
   /** Avanza la mecha. Lo primero de cada `tick`. */

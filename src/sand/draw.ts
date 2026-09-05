@@ -23,6 +23,23 @@ export function paintStroke(
   radius: number,
   erase: boolean,
 ): void {
+  alongStroke(from, to, radius, (cx, cy) => dab(g, cx, cy, radius, erase));
+}
+
+/**
+ * Los centros de brocha a lo largo de un segmento.
+ *
+ * Vive suelto porque lo usan dos gestos: dibujar y la antorcha. Es exactamente
+ * el mismo recorrido —el mismo espaciado, la misma cuenta de pasos—, y tenerlo
+ * dos veces seria condenarlo a que se separaran a la primera correccion: el
+ * dia que el trazo se sintiera bien, el fuego prenderia a saltos.
+ */
+export function alongStroke(
+  from: Point,
+  to: Point,
+  radius: number,
+  cb: (cx: number, cy: number) => void,
+): void {
   const dx = to.x - from.x;
   const dy = to.y - from.y;
   const dist = Math.hypot(dx, dy);
@@ -32,7 +49,7 @@ export function paintStroke(
 
   for (let k = 0; k <= steps; k++) {
     const t = k / steps;
-    dab(g, from.x + dx * t, from.y + dy * t, radius, erase);
+    cb(from.x + dx * t, from.y + dy * t);
   }
 }
 

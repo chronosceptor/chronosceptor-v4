@@ -4,19 +4,25 @@ Un lienzo de física a pantalla completa. El mundo arranca vacío, cae arena des
 y con el ratón o el dedo se dibujan paredes que la desvían — como un MS Paint donde el trazo *es* la
 física. Una rampa la hace bajar, una U la atrapa, un embudo la concentra.
 
-No hay herramientas que elegir: el trazo es siempre el mismo y todo el comportamiento sale de la
-forma que dibujes.
+El trazo es siempre el mismo y todo el comportamiento sale de la forma que dibujes. Sólo hay una
+herramienta que se elige, la **antorcha**, y es la excepción que se explica abajo.
 
-Lo que cae puede ser **arena o agua**, y lo decide un interruptor del dock. El agua se atrapa con el
-lápiz igual que la arena, sólo que con su física: no hace talud, busca nivel, y se escapa por
-cualquier hueco por el que la arena se habría quedado. Y donde se juntan sale **lodo** — que no es un
-tercer material sino arena mojada: se apelmaza, aguanta paredes verticales que la arena seca no
-aguanta, y se va secando hasta volver a desmoronarse sola.
+Lo que cae puede ser **arena o agua**, y lo decide la ficha con la que sacaste cada fuente: hay una
+de cada, y lo que echa un chorro es suyo para siempre. El agua se atrapa con el lápiz igual que la
+arena, sólo que con su física: no hace talud, busca nivel, y se escapa por cualquier hueco por el que
+la arena se habría quedado. Y donde se juntan sale **lodo** — que no es un tercer material sino arena
+mojada: se apelmaza, aguanta paredes verticales que la arena seca no aguanta, y se va secando hasta
+volver a desmoronarse sola.
+
+Y se le puede **prender fuego al dibujo**. Con la antorcha encendida, el puntero deja de dibujar y
+pasa a encender: el trazo que toques arde como una mecha, se consume y desaparece, y por el camino
+enciende cualquier pieza que roce. El agua lo apaga y un corte en el trazo lo detiene, así que un
+cortafuegos dibujado a tiempo significa algo.
 
 Además, del dock de abajo se arrastran **piezas** que participan de la física de verdad — una bola
-que rebota y desportilla, una bomba y una fuente extra de arena. No son adornos pintados sobre el
-lienzo: su cuerpo se estampa en el grid como material sólido y la arena choca con él. La fuente
-principal es una más: se coge, se pone donde quieras y se puede volar.
+que rebota y desportilla, una bomba y fuentes extra. No son adornos pintados sobre el lienzo: su
+cuerpo se estampa en el grid como material sólido y la arena choca con él. La fuente principal es una
+más: se coge, se pone donde quieras y se puede volar.
 
 El color lo eliges tú: el botón del extremo del dock despliega ocho paletas y la que
 marques queda guardada para la próxima visita. Como la fuente rota el color por lotes, los montones
@@ -41,11 +47,13 @@ No hay nada que configurar: no lee nada de fuera y no tiene servidor.
   mantiene hasta soltar, así que no alterna solo a media línea.
 - **Clic derecho arrastrando** fuerza el borrado esté donde esté.
 - **Clear** vacía el lienzo entero.
-- **El interruptor del dock**, junto al de color, cambia entre arena y agua. Afecta a todas las
-  fuentes a la vez y desde el fotograma siguiente; lo que ya cayó se queda como está.
+- **La antorcha del dock** cambia lo que hace el puntero: en vez de dibujar, prende. El trazo que
+  toques empieza a arder por ahí y el fuego corre por él hasta consumirlo. Se apaga volviendo a
+  pulsarla, sacando cualquier ficha o vaciando el lienzo — y el clic derecho sigue borrando mientras
+  tanto, por si te has quedado prendiendo lo que querías quitar.
 
-El mismo gesto funciona con dedo y con ratón: no hace falta ningún selector de herramienta ni gestos
-que haya que aprender.
+El mismo gesto funciona con dedo y con ratón, y salvo la antorcha no hay ningún selector de
+herramienta ni gestos que haya que aprender.
 
 ### Las piezas
 
@@ -58,11 +66,23 @@ Del dock de abajo se arrastra una ficha al lienzo y ahí se queda. Tres gestos e
 
 Y una excepción, solo para la bomba: **tocarla la detona** sin esperar a la mecha.
 
-| Pieza | Qué hace |
+| Ficha | Qué hace |
 |---|---|
-| **Bomba** | Mecha de 2 s con un anillo que se vacía; revienta un radio de 63 celdas (unos 126 px) —arena, **paredes** y **cualquier pieza que pille dentro**— y se consume |
-| **Fuente** | Un segundo chorro, con su propio color dominante de la paleta |
+| **Fuente de arena** | Un chorro más, con su propio color dominante de la paleta |
+| **Fuente de agua** | Lo mismo, pero echando agua: boca más ancha y chorro recto en vez de cono |
+| **Antorcha** | No es una pieza y no se arrastra: se pulsa, y mientras esté encendida el puntero prende en vez de dibujar |
 | **Bola** | Rebota en los bordes, en tus paredes y contra las otras bolas, y se come la arena que toca. Cada golpe **desportilla la pared** |
+| **Bomba** | Mecha de 2 s con un anillo que se vacía; revienta un radio de 63 celdas (unos 126 px) —arena, **paredes** y **cualquier pieza que pille dentro**— y se consume |
+
+Lo que echa cada fuente se decide al sacarla y no vuelve a cambiar: para pasar de arena a agua se
+quita la que hay y se pone la otra. La de serie es de arena.
+
+**El fuego** sólo se lleva por delante lo que hayas dibujado tú: la arena no arde y el suelo del
+mundo tampoco. Avanza a unas 90 celdas por segundo, deja una estela encendida de medio segundo por
+detrás del frente, y **no salta huecos** — un trazo partido corta la mecha. Se apaga contra el agua y
+contra el lodo, y la pared que salva se queda entera. Lo que sí hace es encender **cualquier pieza
+que toque**, con la misma mecha de dos segundos que reparten las explosiones: la bola sale corriendo
+ardiendo, la fuente revienta, y a una bomba —que ya venía encendida— la precipita en el acto.
 
 Hubo dos piezas más: una **cruz giratoria** de cuatro aspas que aventaba la arena y una
 **plataforma** —bandeja con costados que paseaba su carga entera por un trayecto, y que llegó a
@@ -112,12 +132,21 @@ El dibujo no se guarda: cada visita empieza en blanco.
 | `?fill=0.2` | Baja el nivel al que dispara el drenaje. Sin esto, probar la descarga son varios minutos por ciclo |
 | `?cell=N` | Píxeles por celda, de 2 a 8: el tamaño del grano, con el perfil reescalado. Sirve para juzgar la arena, no las piezas |
 
-Desde la consola: `fabrica.inspect()` (arena, **agua**, **mojada**, paredes, fps, grid, **piezas**,
-**dónde** está cada una, **ejecta** en vuelo y **perdidos**), `fabrica.dump(x, y, w, h)` (vuelca los materiales de una
-región como texto) y `fabrica.clear()`.
+Desde la consola: `fabrica.inspect()` (arena, **agua**, **mojada**, **fuego**, paredes, fps, grid,
+**piezas**, **dónde** está cada una, **ejecta** en vuelo y **perdidos**), `fabrica.dump(x, y, w, h)`
+(vuelca los materiales de una región como texto), `fabrica.setTool('fire' | 'draw')` (la antorcha) y
+`fabrica.clear()`.
+
+`fabrica.setEmitMaterial('sand' | 'water')` sigue existiendo, pero ya no es un interruptor de la
+escena: cambia lo que echa **la fuente de serie**, y nada más. Sirve para medir agua sin arrastrar
+una ficha. Las fuentes colocadas traen lo suyo de la ficha con la que salieron.
 
 `donde` hace falta porque `dump()` ya no lo ve todo: la bola y la fuente no escriben nada en el
 grid, así que en un volcado de materiales son invisibles.
+
+`fuego` son las celdas de pared ardiendo ahora mismo. En un incendio en marcha se queda plano —unas
+190 con la brocha de escritorio— porque es la estela del frente, no lo que queda por arder: baja a
+cero cuando el fuego se apaga contra el agua o llega al final del trazo.
 
 `mojada` son las celdas de arena con algo de humedad: es el tamaño del lodo. Sube al mojar y no
 vuelve a cero hasta que se ha secado todo — salvo la franja que toca un charco quieto, que se queda
@@ -139,8 +168,9 @@ src/
     index.ts               bucle principal
     physics.ts             el automata celular
     moisture.ts            filtrado y secado de la humedad (el lodo)
+    fire.ts                las paredes que arden: la mecha y su contagio
     ejecta.ts              arena en vuelo balistico (explosiones y aventado)
-    dock.ts                dock: arrastrar piezas, tirarlas, y elegir paleta
+    dock.ts                dock: fichas, antorcha, papelera y paletas
     gadgets/               piezas: bomba, fuente, bola, y la explosión
     palette.ts             las ocho paletas y la mezcla de un grano
     grid.ts, materials.ts, render.ts, rng.ts
@@ -548,6 +578,68 @@ Cosas que parecen arbitrarias en el código y no lo son:
 - **El alcance para encenderse se mide contra el cuerpo de la pieza, no contra su centro.** Basta con
   que la onda la roce; midiendo por el centro, una pieza a la que la explosión le ha arrancado media
   esfera de arena de debajo se quedaría tan tranquila.
+
+### Del fuego
+
+- **La antorcha es un modo, y es el único que hay.** Va contra la regla que regía esto: no había
+  herramienta activa, todo gesto hacía siempre lo mismo y el contexto decidía si dibujaba o borraba.
+  El fuego no cabe en ese esquema —no es una pieza que se coloque ni algo que caiga, es lo que hace
+  el puntero— y la alternativa era inventarle un gesto que hubiera que aprender. Se paga con un botón
+  que hay que acordarse de apagar, y por eso se apaga solo en cuanto sacas una ficha o vacías el
+  lienzo. A cambio, prender es exactamente el mismo gesto con ratón y con dedo, que es lo que rompía
+  la otra idea que se probó: que el cursor fuera la fuente.
+- **Una celda que arde sigue siendo `WALL`.** Lo natural sería un material nuevo, `EMBER`, y sale
+  caro por donde no se ve: el bucle caliente despacha 326.000 celdas por frame y su guardia son dos
+  comparaciones contra literales medidas al milisegundo (0,36 ms el bucle original, 0,54 con las
+  comparaciones, 0,76 con una tabla). Un material más habría que pagarlo en cada celda del lienzo
+  para algo que ocurre en doscientas. Dejándolo en `WALL`, `SOLID` no cambia, el bitmap no gana una
+  rama y la arena se sigue apoyando encima hasta que la pared desaparece de verdad; el fuego vive en
+  una lista aparte, igual que la ejecta y por la misma razón.
+- **El frente se propaga en pasadas de una celda, no dando saltos del tamaño del paso.** A 90
+  celdas/s y 60 Hz tocaría celda y media por fotograma, y lo barato sería prender en un radio de dos.
+  Con eso el fuego cruza los huecos de una celda, y que no salte los cortes es media gracia: un
+  cortafuegos dibujado a tiempo tiene que servir de algo. La velocidad se acumula en un decimal y se
+  gasta en pasadas enteras. Medido: un trazo de 726 celdas de largo por tres de grosor arde entero en
+  9 s, y dos trazos separados por 30 celdas se quedan en que arde sólo el prendido — el segundo sigue
+  intacto medio minuto después.
+- **Ocho vecinas y no cuatro.** Bresenham deja los trazos inclinados conectados sólo en diagonal, así
+  que con cuatro una raya torcida no ardería más allá de la primera celda — y casi nadie dibuja
+  rectas.
+- **Al fuego que ya encendió una pieza no se le vuelve a hacer caso.** La mecha precipita lo que ya
+  estaba ardiendo, que es lo que hace caer una fila de bombas en cascada. Pero el fuego toca a la
+  misma pieza en todos los fotogramas que la llama siga a su lado, así que sin distinguir los dos
+  casos cada roce contaba como aviso nuevo: medido, rozar una bola con la antorcha la reventaba a los
+  0,75 s en vez de dejarla arder los dos segundos y cruzar media pantalla, que es justo lo que hay
+  que ver. Lo separa una bandera en la mecha y no un caso especial de la bomba — a una bomba sí hay
+  que precipitarla, porque nace encendida por su cuenta y que la llama la alcance es exactamente lo
+  que se espera que la haga estallar. Medido: tocada con la antorcha revienta a los 0,6 s en vez de a
+  los 2,35 que tardaría sola.
+- **El agua apaga y la pared se salva.** Es lo único que salva un trazo ya prendido, y es lo que
+  convierte una fuente de agua en una manguera. Cuenta también el lodo: una pared metida en barro no
+  arde. Medido sobre un trazo de 1.100 px con una fuente de agua encima de la mitad derecha: el fuego
+  entró por la izquierda, se comió el tramo seco y se paró en seco contra el mojado. Ojo al medirlo
+  —un cuenco con costados se inunda entero, y entonces no hay dónde prender y parece que el fuego
+  esté roto.
+- **La llama es el único color saturado del tema, y no lleva halo.** El resto es gris sobre `#0B0B0C`
+  a propósito, porque el color de la arena tiene que ser lo único que destaque. Se permite porque es
+  transitorio y pequeño —una banda que avanza y se apaga—, y se pinta en marcas duras del tamaño de
+  la celda: un resplandor translúcido por encima del lienzo apagaría la arena, que es exactamente lo
+  que ya pasó con unas rayas decorativas que volvían el amarillo un verde sucio.
+- **Lo que echa una fuente se decide al sacarla y no vuelve a cambiar.** Hubo un interruptor de la
+  escena que las pasaba todas a agua o a arena de golpe, y con una ficha de cada eran dos sitios
+  diciendo lo mismo: colocabas una de arena y el interruptor la volvía de agua sin haberla tocado. Lo
+  que se pierde es poder cambiar de material sin volver a colocar; lo que se gana es que un chorro
+  puesto siga echando lo que prometía su ficha, y que dos fuentes puedan estar echando cosas
+  distintas a la vez — que es lo que hace falta para apagar con una lo que alimenta la otra.
+- **Las dos fuentes se nombran por lo que echan, no por la pieza.** Una duna y una gota, y no dos
+  conos: es lo único que las distingue —el chorro es el mismo— y además es lo que se busca al mirar
+  el dock. Un cono de granos y un cono de gotas se parecían demasiado a 24 píxeles.
+- **La antorcha no lleva la clase de las fichas, y eso es lo que importa.** `.ficha` es lo que atenúa
+  el dock cuando se llega al tope de piezas, y el fuego no ocupa ninguna de las diez plazas: al
+  contrario, es otra forma de hacer sitio, igual que la bomba. Va dentro del grupo de fichas de todos
+  modos, porque los tres iconos que eligen qué le echas al lienzo tienen que estar juntos, y escrito
+  en el orden en que se ve — colocándolo con `order` de flex saldría bien en pantalla y el tabulador
+  iría por otro sitio.
 
 ## Historia
 

@@ -16,6 +16,9 @@ function oscurecer(c: number, wv: number): number {
   return ((c & 0xff000000) | (b << 16) | (g << 8) | r) >>> 0;
 }
 
+/** Que va a hacer el proximo gesto, para dibujarlo bajo el puntero. */
+export type CursorMode = 'draw' | 'erase' | 'fire';
+
 /** Contexto de la capa vectorial: `s` son pixeles CSS por celda. */
 export interface DrawCtx {
   ctx: CanvasRenderingContext2D;
@@ -206,13 +209,18 @@ export class Renderer {
    * En modo goma se dibuja discontinuo: es la unica senal de que el gesto va a
    * borrar en vez de dibujar, y sin ella el cambio de modo por contexto resulta
    * invisible hasta que ya es tarde.
+   *
+   * Con la antorcha, en color de llama y algo mas grueso. Aqui la senal importa
+   * el doble: el modo no lo decide el contexto sino un boton del dock que se
+   * queda encendido, asi que el puntero tiene que recordar en todo momento que
+   * el proximo gesto prende en vez de dibujar.
    */
-  drawCursor(d: DrawCtx, px: number, py: number, radiusCells: number, erasing: boolean): void {
+  drawCursor(d: DrawCtx, px: number, py: number, radiusCells: number, mode: CursorMode): void {
     const { ctx, s } = d;
     ctx.save();
-    ctx.strokeStyle = erasing ? THEME.inkBright : THEME.ink;
-    ctx.lineWidth = 1;
-    if (erasing) ctx.setLineDash([3, 3]);
+    ctx.strokeStyle = mode === 'fire' ? THEME.fire : mode === 'erase' ? THEME.inkBright : THEME.ink;
+    ctx.lineWidth = mode === 'fire' ? 1.5 : 1;
+    if (mode === 'erase') ctx.setLineDash([3, 3]);
     ctx.beginPath();
     ctx.arc(px, py, Math.max(3, radiusCells * s), 0, Math.PI * 2);
     ctx.stroke();

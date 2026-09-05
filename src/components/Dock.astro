@@ -10,10 +10,22 @@
 
 import { PALETTES, rgbCss, type Palette } from '../sand/palette';
 
+/**
+ * Las fichas que se arrastran al lienzo.
+ *
+ * La fuente sale en dos: lo que siembra cada chorro se elige al colocarlo y ya
+ * no cambia. Hubo un interruptor de escena que las pasaba todas a agua o a
+ * arena de golpe, y con dos fichas solo daba para contradecirse — colocabas una
+ * de arena y el interruptor la volvia de agua sin tocarla.
+ *
+ * `id` decide el icono y `kind` la pieza: dos fichas distintas colocan la misma
+ * clase con distinto material.
+ */
 const PIEZAS = [
-  { kind: 'emitter', label: 'Fuente' },
-  { kind: 'ball', label: 'Bola: rebota y se come la arena' },
-  { kind: 'bomb', label: 'Bomba' },
+  { id: 'emitter-sand', kind: 'emitter', material: 'sand', label: 'Fuente de arena' },
+  { id: 'emitter-water', kind: 'emitter', material: 'water', label: 'Fuente de agua' },
+  { id: 'ball', kind: 'ball', material: null, label: 'Bola: rebota y se come la arena' },
+  { id: 'bomb', kind: 'bomb', material: null, label: 'Bomba' },
 ] as const;
 
 /**
@@ -39,33 +51,46 @@ const INICIAL = PALETTES[0]!;
 <div id="dock" role="toolbar" aria-label="Piezas y color">
   <div id="dock-fichas">
     {
-      PIEZAS.map(({ kind, label }) => (
-        <button type="button" class="ficha" data-kind={kind} title={label} aria-label={label}>
+      PIEZAS.map(({ id, kind, material, label }) => (
+        <>
+        <button
+          type="button"
+          class="ficha"
+          data-kind={kind}
+          data-material={material}
+          title={label}
+          aria-label={label}
+        >
           <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            {/* El chorro, que es lo unico que se ve de la fuente: la pieza no se
-                dibuja. Llevaba una tolva con cano y prometia algo que en el
-                lienzo no existe. Nace en un punto y se abre hacia abajo, igual
-                que la arena. */}
-            {kind === 'emitter' && (
-              <g fill="currentColor" stroke="none">
-                <circle cx="12" cy="4.2" r="1.15" />
-                <circle cx="10.1" cy="9" r="1.15" />
-                <circle cx="13.9" cy="9" r="1.15" />
-                <circle cx="8.2" cy="14" r="1.15" />
-                <circle cx="12" cy="14" r="1.15" />
-                <circle cx="15.8" cy="14" r="1.15" />
-                <circle cx="6.3" cy="19" r="1.15" />
-                <circle cx="10.1" cy="19" r="1.15" />
-                <circle cx="13.9" cy="19" r="1.15" />
-                <circle cx="17.7" cy="19" r="1.15" />
-              </g>
+            {/* Las dos fuentes se nombran por LO QUE ECHAN, no por la pieza.
+                Es lo unico que las distingue —el chorro es el mismo— y ademas
+                lo que se busca al mirar el dock: no "una fuente", sino arena o
+                agua. Un cono de granos y un cono de gotas se parecian
+                demasiado a este tamano; una duna y una gota no se confunden.
+
+                Las dos macizas: lo que cae va relleno y lo que revienta va a
+                linea (la bomba y la antorcha), y eso separa de un vistazo los
+                dos grupos del dock. */}
+            {id === 'emitter-sand' && (
+              <path
+                fill="currentColor"
+                stroke="none"
+                d="M1.8 18.9C5.6 18.9 7.4 7.9 11.6 7.9C15.4 7.9 17.4 14.4 19 16.6C19.8 17.7 20.9 18.9 22.2 18.9Z"
+              />
+            )}
+            {id === 'emitter-water' && (
+              <path
+                fill="currentColor"
+                stroke="none"
+                d="M12 3.6c3.5 4.2 5.6 6.9 5.6 9.7a5.6 5.6 0 0 1-11.2 0c0-2.8 2.1-5.5 5.6-9.7z"
+              />
             )}
             {/* Un circulo y nada mas. La bola es maciza y no hace mas que rodar:
                 las lineas de movimiento que llevaba prometian un efecto que no
                 existe, y con el circulo relleno ya no hay forma de confundirla
                 con la bomba, que va hueca y con mecha. */}
-            {kind === 'ball' && <circle cx="12" cy="12" r="6.4" fill="currentColor" stroke="none" />}
-            {kind === 'bomb' && (
+            {id === 'ball' && <circle cx="12" cy="12" r="6.4" fill="currentColor" stroke="none" />}
+            {id === 'bomb' && (
               <>
                 <circle cx="11" cy="14.5" r="6.2" />
                 <path d="M15.4 10.1l1.9-1.9M17.3 8.2c.9-1.4 2.2-1.4 3.1-.4" />
@@ -73,37 +98,42 @@ const INICIAL = PALETTES[0]!;
             )}
           </svg>
         </button>
+        {/* La antorcha va aqui, en el hueco entre las dos fuentes y la bola, y
+            no despues del grupo: los tres iconos que eligen "que echo al
+            lienzo" tienen que estar juntos. Se escribe dentro del bucle para
+            que el orden del DOM sea el orden que se ve — con `order` de flex
+            saldria bien en pantalla y el tabulador iria por otro sitio.
+
+            No lleva la clase `.ficha` y eso es lo que importa: `.ficha` es lo
+            que atenua `#dock.lleno`, y el fuego no ocupa ninguna de las diez
+            plazas. Al contrario, es otra forma de hacer sitio — igual que la
+            bomba, que tambien sigue disponible con el lienzo al tope. */}
+        {id === 'emitter-water' && (
+          <button
+            type="button"
+            id="dock-fuego"
+            title="Antorcha: prende tus trazos"
+            aria-label="Antorcha: prende tus trazos"
+            aria-pressed="false"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              {/* Llama hueca, del mismo peso de trazo que la bomba. Las dos
+                  cosas que revientan van a linea y las dos que caen van
+                  macizas, que es lo que separa de un vistazo los dos grupos. */}
+              <path d="M12 21.2c-3.1 0-5.5-2.1-5.5-5 0-3.9 3.7-5.7 3.2-10 2.4 1.2 3.7 3.4 3.7 5.5 0 0 1.2-1 1.2-2.7 2 1.9 2.9 4.4 2.9 7.2 0 2.9-2.4 5-5.5 5z" />
+            </svg>
+          </button>
+        )}
+        </>
       ))
     }
   </div>
 
-  {/* El separador, el interruptor de material y el boton de color van fuera de
-      #dock-fichas: no se arrastran, y el tope de piezas no debe apagarlos.
-      Dentro se habrian apagado con el lienzo lleno, que es justo cuando mas
-      falta hace poder cambiar de material o de color. */}
+  {/* El separador y el boton de color van fuera de #dock-fichas: no se
+      arrastran, y el tope de piezas no debe apagarlos. Dentro se habrian
+      apagado con el lienzo lleno, que es justo cuando mas falta hace poder
+      cambiar de color. */}
   <div id="dock-sep" aria-hidden="true"></div>
-
-  {/* Que cae de las fuentes. Un solo boton con dos estados y no dos fichas: es
-      un interruptor de la escena entera, no una pieza que se coloque. El icono
-      que se ve es el del material que esta cayendo AHORA, no el que se
-      obtendria al pulsar — un boton que ensena lo que va a pasar en vez de lo
-      que pasa deja de poder leerse como indicador. */}
-  <button type="button" id="dock-material" title="Cae arena" aria-label="Cae arena" aria-pressed="false">
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      {/* Arena: tres granos sueltos cayendo, del mismo relleno macizo que el
-          chorro de la ficha de la fuente. */}
-      <g class="mat-arena" fill="currentColor" stroke="none">
-        <circle cx="8.4" cy="7.4" r="1.5" />
-        <circle cx="14.6" cy="11" r="1.5" />
-        <circle cx="9.6" cy="15.4" r="1.5" />
-        <circle cx="15.2" cy="17.4" r="1.5" />
-      </g>
-      {/* Agua: una gota, a trazo, del grosor de las demas piezas huecas. */}
-      <g class="mat-agua">
-        <path d="M12 4.2c3.4 4 5.4 6.7 5.4 9.4a5.4 5.4 0 0 1-10.8 0c0-2.7 2-5.4 5.4-9.4z" />
-      </g>
-    </svg>
-  </button>
 
   <button
     type="button"
@@ -208,11 +238,58 @@ const INICIAL = PALETTES[0]!;
     cursor: grabbing;
   }
 
-  /* Tope de piezas alcanzado: las fichas dejan de ofrecerse. */
+  /* Tope de piezas alcanzado: las fichas dejan de ofrecerse. La antorcha no
+     lleva `.ficha` y por eso no entra aqui — no ocupa plaza, y con el lienzo
+     lleno es justo cuando mas sirve. */
   #dock.lleno .ficha,
   #dock.solo-bomba .ficha:not([data-kind='bomb']) {
     opacity: 0.3;
     cursor: not-allowed;
+  }
+
+  /* --- La antorcha ---------------------------------------------------------
+     Misma caja que una ficha, pero se pulsa en vez de arrastrarse. */
+  #dock-fuego {
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: #8a8a97;
+    cursor: pointer;
+    touch-action: none;
+    -webkit-tap-highlight-color: transparent;
+    transition: color 160ms ease, background-color 160ms ease;
+  }
+
+  #dock-fuego svg {
+    width: 24px;
+    height: 24px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.15;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  #dock-fuego:hover,
+  #dock-fuego:focus-visible {
+    color: #d6d6e0;
+    background: rgba(255, 255, 255, 0.06);
+    outline: none;
+  }
+
+  /* Encendida. Es el unico boton del dock que deja algo activo, asi que la
+     senal tiene que ser inequivoca: el color de la llama, que no lo usa nada
+     mas del dock, y el mismo aro que marca la paleta elegida. Un aro y no una
+     escala, por lo mismo que alli — agrandarla movia a las vecinas. */
+  #dock-fuego[aria-pressed='true'] {
+    color: #ff8a3d;
+    background: rgba(255, 138, 61, 0.12);
+    box-shadow: 0 0 0 1px rgba(255, 138, 61, 0.55);
   }
 
   /* --- Color de la arena --------------------------------------------------- */
@@ -246,52 +323,6 @@ const INICIAL = PALETTES[0]!;
     outline: none;
   }
 
-  /* El disco lleva el mismo filete de un pixel que todo lo demas: sin el, sobre
-     el fondo translucido del dock la muestra flota sin borde. */
-  /* Mismo boton que el de color: 44x44, redondo y del gris de las fichas. */
-  #dock-material {
-    display: grid;
-    place-items: center;
-    width: 44px;
-    height: 44px;
-    padding: 0;
-    border: 0;
-    border-radius: 999px;
-    background: transparent;
-    color: #8a8a97;
-    cursor: pointer;
-    transition: background 140ms ease, color 140ms ease;
-  }
-
-  #dock-material svg {
-    width: 24px;
-    height: 24px;
-    fill: none;
-    stroke: currentColor;
-    stroke-width: 1.15;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-  }
-
-  #dock-material:hover,
-  #dock-material:focus-visible {
-    color: #d6d6e0;
-    background: rgba(255, 255, 255, 0.06);
-  }
-
-  /* Solo se ve el material que esta cayendo. El estado lo lleva aria-pressed,
-     asi que el CSS y el lector de pantalla dicen lo mismo sin duplicar nada. */
-  #dock-material .mat-agua {
-    display: none;
-  }
-
-  #dock-material[aria-pressed='true'] .mat-arena {
-    display: none;
-  }
-
-  #dock-material[aria-pressed='true'] .mat-agua {
-    display: inline;
-  }
 
   #dock-color-disco,
   .muestra {
@@ -387,7 +418,6 @@ const INICIAL = PALETTES[0]!;
   }
 
   #dock.papelera #dock-fichas,
-  #dock.papelera #dock-material,
   #dock.papelera #dock-sep,
   #dock.papelera #dock-color,
   #dock.papelera #dock-paletas {
@@ -401,6 +431,7 @@ const INICIAL = PALETTES[0]!;
   @media (prefers-reduced-motion: reduce) {
     #dock,
     .ficha,
+    #dock-fuego,
     #dock-color,
     .muestra {
       transition: none;

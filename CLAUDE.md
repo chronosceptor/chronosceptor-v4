@@ -1,8 +1,9 @@
 # CLAUDE.md
 
-Lienzo de física: cae **arena o agua** —lo elige un interruptor del dock—, el usuario dibuja paredes
-que las desvían, y donde se juntan sale lodo, que es arena con humedad. El color sale de
-la paleta que elija en el dock. Astro **enteramente estático**: ya no hay endpoints, ni
+Lienzo de física: cae **arena o agua** —lo elige la ficha con la que se saca cada fuente—, el usuario
+dibuja paredes que las desvían, y donde se juntan sale lodo, que es arena con humedad. Y hay una
+**antorcha** que prende esas paredes: arden como una mecha, se consumen y encienden lo que tocan. El
+color sale de la paleta que elija en el dock. Astro **enteramente estático**: ya no hay endpoints, ni
 variables de entorno, ni nada que resolver en servidor.
 
 La justificación de fondo de cada decisión de física está en el README, sección
@@ -44,15 +45,12 @@ La justificación de fondo de cada decisión de física está en el README, secc
   Playwright dejó `paredes 0` sin ningún error. Cura antes de medir nada con el ratón:
   `document.querySelectorAll('vite-error-overlay').forEach(o => o.remove())`.
 - **Una captura de elemento de Playwright sobre algo que se mueve solo cuelga el servidor MCP
-  entero, no solo esa llamada.** Pasó con `#dock`, que se autooculta y al que le había puesto un
-  `MutationObserver` para quitarle la clase `reposo`: nunca llegó a estar "quieto", la captura se
-  colgó y con ella toda la sesión de navegador —`browser_close` y `browser_navigate` empezaron a
-  dar timeout—. Para ver el dock, fuérzale `style.opacity` sin observador y captura la página
-  entera. **Y aun así se cuelga**: la de página completa funcionó una vez tras navegar y luego
-  empezó a dar timeout en «fonts loaded» una y otra vez, porque el bucle de arena nunca deja un
-  fotograma estable que esperar. `browser_evaluate` sigue respondiendo con normalidad mientras
-  tanto, así que no parece que el servidor esté tocado. Cura: `pkill -f mcp-chrome-`, volver a
-  navegar y **`fabrica.destroy()` antes de capturar** — corta el `rAF` y deja la escena quieta.
+  entero, no solo esa llamada.** Pasó con `#dock`, que se autooculta: nunca llegó a estar "quieto"
+  y se llevó por delante toda la sesión de navegador. Y la de página completa también se cuelga en
+  «fonts loaded», porque el bucle de arena nunca deja un fotograma estable que esperar. Receta que
+  sí funciona: `fabrica.destroy()` **antes** de capturar —corta el `rAF` y congela la escena—,
+  `dock.style.opacity = '1'` sin observador, y captura de página entera. Si ya se colgó,
+  `pkill -f mcp-chrome-` y volver a navegar.
 - **Para mirar la arena, casi siempre es mejor sacar los píxeles que capturar la pantalla.**
   `browser_evaluate` con el parámetro `filename` guarda lo que devuelvas, así que un
   `canvas.toDataURL()` —recortado y ampliado con `drawImage` sobre un canvas auxiliar— baja a
@@ -91,8 +89,7 @@ La justificación de fondo de cada decisión de física está en el README, secc
   grano deja de leerse como arena. Si añades una, mídele la luminancia antes
   (`0.2126r + 0.7152g + 0.0722b`, sobre 255) y respeta los pesos `3,3,2,1`: a partes iguales la
   cuenca sale confeti. Si algún día vuelve a haber un endpoint con credenciales, **nunca
-  `import.meta.env` para un secreto** — Vite lo sustituye por el valor literal al compilar y la
-  clave acaba dentro del artefacto; van por `astro:env/server` con `access: 'secret'`.
+  `import.meta.env` para un secreto**: van por `astro:env/server` con `access: 'secret'`.
 - **`setPalette` entra en el mismo fotograma, sin pausa.** Tuvo un `SHIFT_PAUSE` de 1,2 s que
   paraba la siembra para que el cambio de canción se leyera como un corte; elegido a mano eso es
   latencia. No lo reintroduzcas: la estratificación la da el color guardado en cada grano, no la
@@ -114,11 +111,9 @@ La justificación de fondo de cada decisión de física está en el README, secc
   Hacen falta tres pasadas para que la media signifique algo, y aun así no da para afinar
   un porcentaje.
 - **La física de cintas no mueve una carga compacta.** `slideLateral` exige la celda de destino
-  vacía, así que en una bandeja llena solo puede moverse el grano de delante de cada capa, y ése
-  está contra el costado. Lo descubrió la plataforma —que ya no existe—: salía con 124 granos y
-  llegaba con 22, y los 102 que faltaban no se caían por ningún sitio, nunca se movieron. El
+  vacía, así que en una bandeja llena solo se mueve el grano de delante de cada capa. El
   `BELT_L`/`BELT_R` de `physics.ts` sigue ahí y volverá a tentar: si algo tiene que viajar en bloque,
-  hay que trasladarlo a mano.
+  hay que trasladarlo a mano. Los números, en el README.
 - **`inspect().piezas` no cuenta la fuente principal, pero `donde` sí la lista.** Es la pieza de
   serie (`permanent`) y no ocupa hueco del tope: con el lienzo lleno, `piezas` dice 10 y `donde`
   trae 11. El `r` que da `donde` es el de **agarre**, no el del cuerpo: la bola le suma `GRAB_EXTRA`,
@@ -127,10 +122,9 @@ La justificación de fondo de cada decisión de física está en el README, secc
   sin ninguna fuente es un estado válido y no cae arena; si al medir no crece `sand`, mira primero
   si hay fuente antes de sospechar de la física.
 - **Arrastrar la fuente muta su origen, y `clear()` la repone donde la dejaste, no en el centro.**
-  `onMoved()` escribe en `source.x/y`, que es de donde `Emitter.main` la vuelve a crear. Invalidó
-  dos medidas seguidas: un barrido de sondas que agarra la pieza la va arrastrando, y yo seguía
-  calculando los puntos desde el centro original. Si sondeas agarres, lee `donde` **antes de cada
-  sonda** y calcula relativo a eso, o recarga la página entre una y otra.
+  `onMoved()` escribe en `source.x/y`, que es de donde `Emitter.main` la vuelve a crear. Si sondeas
+  agarres, lee `donde` **antes de cada sonda** y calcula relativo a eso, o recarga entre una y otra:
+  un barrido de sondas va arrastrando la pieza e invalida la medida sin avisar.
 - **El tamaño de la bola sale del ancho del lienzo** (`R_FRAC`), pero con el grano fino **mandan los
   topes**: las 17 celdas de radio en escritorio y 8 en vertical son `R_MAX`/`R_MIN`, no la fracción,
   que se pasa de largo en los dos perfiles. Un número absoluto medido en un perfil no vale en el otro.
@@ -138,32 +132,26 @@ La justificación de fondo de cada decisión de física está en el README, secc
   si algo sangra arena, pero solo mirando el delta en una ventana: leerlo en seco y ver 95 no acusa
   a lo que acabas de tocar.
 - **Una pieza que se mueve dentro de un montón se come la arena si no se le da salida.**
-  `displaceSand()` destruye el grano que no cabe en ningún hueco. Sin `Grid.overflow`, una
-  sola cruz bajo el chorro se comía 337 granos en 5 s (15% del caudal). Para medirlo hay
-  que comparar la ganancia con y sin la pieza en la misma ventana, nunca mirar `sand` a
-  secas: la fuente y el drenaje enmascaran la fuga. `inspect().perdidos` no debe subir mientras
-  la pieza está puesta.
+  `displaceSand()` destruye el grano que no cabe; para eso está `Grid.overflow`. Para medirlo hay
+  que comparar la ganancia con y sin la pieza en la misma ventana, nunca mirar `sand` a secas: la
+  fuente y el drenaje enmascaran la fuga. `inspect().perdidos` no debe subir mientras está puesta.
 - **El grano es de 2 px en escritorio y 3 en vertical, y bajarlo NO es cambiar `cell`.** Todo lo
   calibrado en celdas encoge en pantalla en la misma proporción, así que bajar `cell` a secas no da
   una versión fina de esta escena: da otra escena. La regla del reescalado es que **lo que va por
   longitud sube con la finura y lo que llena área sube con su cuadrado** —brocha, boquilla, boca del
   drenaje y cono por `k`; caudal por `k²`—. El tope de arena ya no está en esa tabla: es una
-  fracción de las celdas del lienzo (`SAND_CAP`, en `world.ts`), así que sube solo con la finura y
-  con el tamaño de la pantalla. Cuando era un número absoluto —304.000, justo el lienzo entero de
-  este portátil— en un 4K o un ultrapanorámico dejaba de ser una red de seguridad y pasaba a ser el
-  tope de verdad: el emisor se cortaba ahí y el drenaje no llegaba a dispararse nunca.
+  fracción de las celdas del lienzo (`SAND_CAP`, en `world.ts`), y como número absoluto dejaba de
+  ser una red de seguridad en cuanto la pantalla era grande. No lo vuelvas a fijar.
 - **Para llenar el lienzo deprisa, fuentes repartidas a lo ancho — apiladas en el mismo eje se
   ahogan entre ellas.** Cada una solo puede sembrar en las celdas libres de su cono, y dos conos en
   la misma columna se pelean por las mismas: cinco en fila vertical daban 680 granos/s, menos que
   la de serie sola. Seis repartidas a lo ancho dan 8.200/s y llenan hasta el disparo del drenaje en
   40 s en vez de en varios minutos.
-- **El techo de arena de la escena no lo pone ningún parámetro: lo pone el cono.** Con la fuente de
-  serie —una sola, central— la arena se asienta en un talud que acaba tocando la boquilla, y ahí la
-  fuente se ahoga en su propio montón. Medido: a los 7 minutos, 140.000 granos (el 46% del lienzo),
-  el pico en la fila 57 contra la boquilla en la 51, y el caudal caído de 1.575 a 128 granos/s. El
-  disparo del drenaje está en 219.000, así que **con una sola fuente no se alcanza nunca** y el
-  ciclo de descarga no llega a ocurrir. Con siete fuentes repartidas arriba sí: 219.000 en 40 s y el
-  drenaje abriendo por nivel. Si mides el llenado, cuenta con eso antes de sospechar del emisor.
+- **El techo de arena no lo pone ningún parámetro: lo pone el cono.** Con la fuente de serie —una
+  sola y central— el montón acaba tapando la boquilla y el caudal se ahoga: 140.000 granos a los 7
+  minutos y el drenaje, que dispara en 219.000, **no llega a abrir nunca**. Con siete fuentes
+  repartidas sí, en 40 s. Si mides el llenado, cuenta con eso antes de sospechar del emisor. Los
+  números están en el README.
 - **`regrain` (`world.ts`) solo alcanza a la tabla del perfil, no a las constantes en celdas de los
   demás módulos.** `MAX_VEL`, `CHUTE_STEPS` y `AVALANCHE_STEPS` en `physics`, la gravedad y el tope
   de la `ejecta`, `BLAST_R`, el cuerpo y el agarre de la bomba, el radio de la bola, `TAP_CELLS`,
@@ -185,10 +173,8 @@ La justificación de fondo de cada decisión de física está en el README, secc
   se pinta al arrastrar la fuente salen los dos de ahí. Si calculas la forma aparte en el render,
   acabarás prometiendo un cono por donde la arena no sale.
 - **`SPREAD_ROWS` no es solo estética: es también la altura de la caja de agarre.** Alargar el cono
-  se come sitio de dibujo alrededor del chorro. Se probó con 22 —llega a su ancho en el primer
-  tercio de la caída y el resto baja recto— y con 34, ambas medidas con el grano grueso de
-  entonces; las 51 de ahora son ese mismo cono con el grano fino. Se abre casi todo el rato
-  que se ve, que es lo que se lee como que crece.
+  se come sitio de dibujo alrededor del chorro. Es una perilla de gusto y está calibrada: el cono
+  tiene que abrirse casi todo el rato que se ve, que es lo que se lee como que crece.
 - **La fuente se agarra por una caja (`grabBox`), no por un radio.** Es la única pieza que no tiene
   cuerpo dibujado y que cuelga entera por debajo de su centro —su `cy` es el vértice del que cae la
   arena—, así que un círculo centrado ahí prometería un objetivo que no es el que se ve. El aro de
@@ -203,9 +189,31 @@ La justificación de fondo de cada decisión de física está en el README, secc
   fantasma nace `held` para que la fuente enseñe su cono mientras lo llevas, y nada más lo apaga: el
   `held` de una pieza agarrada lo quita el soltarla, y el fantasma no pasa por ahí. Se quedaba con
   el cono pintado para siempre.
-- **El dock tiene tres piezas: fuente, bola y bomba.** Hubo una cruz giratoria y una plataforma, y
-  se quitaron enteras aunque funcionaban (commit `b52c517`, con lo último que llegaron a hacer:
-  colocación en dos tiempos y trayecto inclinado). No las reintroduzcas por tu cuenta.
+- **El dock tiene cuatro fichas —fuente de arena, fuente de agua, bola y bomba— y un botón que no es
+  ficha: la antorcha.** Hubo una cruz giratoria y una plataforma, y se quitaron enteras aunque
+  funcionaban (commit `b52c517`, con lo último que llegaron a hacer: colocación en dos tiempos y
+  trayecto inclinado). No las reintroduzcas por tu cuenta.
+- **La antorcha va dentro de `#dock-fichas` pero SIN la clase `.ficha`, y no es un descuido.**
+  `.ficha` es lo que atenúan `#dock.lleno` y `#dock.solo-bomba`, y el fuego no ocupa plaza: al
+  contrario, es otra forma de hacer sitio. Está dentro del grupo porque los tres iconos que eligen
+  qué le echas al lienzo tienen que verse juntos, y escrito en el orden en que se ve —con `order` de
+  flex el tabulador iría por otro sitio—.
+- **El material ya NO es global: lo lleva cada fuente y se fija al colocarla.** `TickCtx.material`
+  ya no existe y `Emitter.tick` no lo pisa cada paso. `fabrica.setEmitMaterial` sigue ahí pero cambia
+  sólo **la fuente de serie**; es una ayuda de consola para medir agua sin arrastrar una ficha.
+  `build()` copia `source.material` del mundo anterior, o un redimensionado la devolvía a arena.
+- **Una celda que arde sigue siendo `WALL`: no hay material nuevo.** El fuego es una lista aparte
+  (`fire.ts`), como la ejecta. Un `EMBER` obligaría a pagar una comparación más en las 326.000 celdas
+  del bucle caliente —ver más abajo lo del guardia— para algo que ocurre en doscientas. No lo
+  conviertas en material.
+- **El fuego se propaga en pasadas de UNA celda, nunca en un radio.** Un radio de dos iría al doble
+  de deprisa y cruzaría los huecos de una celda; que no salte los cortes es media gracia. Y ocho
+  vecinas, no cuatro: Bresenham deja los trazos inclinados conectados sólo en diagonal.
+- **`Wick` distingue el fuego de una onda (`Blast.fire`), y hace falta.** Una onda precipita lo que
+  ya ardía —la cascada de bombas— pero el fuego toca la misma pieza en cada fotograma: sin la
+  bandera `porFuego`, rozar una bola con la antorcha la reventaba a los 0,75 s en vez de dejarla
+  arder los dos segundos. A la bomba sí hay que precipitarla, y ese caso lo cubre la misma bandera
+  (nace encendida por su cuenta, no por el fuego).
 - **El botón de color vive fuera de `#dock-fichas`, y es a propósito.** No se arrastra, y las reglas
   de `#dock.lleno` / `#dock.solo-bomba` apagan `.ficha`: dentro, se habría apagado con el lienzo al
   tope. El panel de paletas se posiciona contra `#dock`, que es bloque contenedor de sus hijos
@@ -218,16 +226,13 @@ La justificación de fondo de cada decisión de física está en el README, secc
 - **La bola no gira ni lleva marca en la superficie.** El giro se montó entero, medido y correcto,
   y se quitó junto con las cinco texturas que se probaron para enseñarlo. El porqué está en el
   README. No lo reintroduzcas por tu cuenta.
-- **El fondo blanco de un asset generado no se quita por color.** Las piezas van tramadas en
-  semitono —puntos negros sobre blanco— y un borrado por color se lleva también el blanco de entre
-  los puntos, que está *dentro* de la pieza, y la deja agujereada. `scripts/asset-alfa.py` saca el
-  alfa de la región exterior por inundación desde las cuatro esquinas (cuatro, porque la figura
-  suele tocar el borde y parte el exterior en trozos) y respeta el alfa que ya venga hecho. Los
-  prompts y el flujo entero están en `docs/prompts-piezas.md`.
+- **Si alguna vez vuelve a haber un asset dibujado, su fondo blanco NO se quita por color.** Las
+  piezas iban tramadas en semitono y un borrado por color agujerea la figura. El porqué, el flujo y
+  los prompts están en `docs/historia.md` y `docs/prompts-piezas.md`; la herramienta,
+  en `scripts/asset-alfa.py`.
 - **El fondo es un solo archivo fijo: `public/background.webp`, escrito a pelo en el CSS de
-  `SandCanvas.astro`.** Hubo un sorteo entre los `backgroundNN.webp` que hubiera en `public/`,
-  leídos con `readdirSync` en el frontmatter; se quitó entero. Soltar un archivo nuevo en
-  `public/` ya no lo mete en la rotación —no hay rotación—: hay que cambiar la `url()`.
+  `SandCanvas.astro`.** No hay rotación: soltar un archivo nuevo en `public/` no hace nada, hay que
+  cambiar la `url()`.
 - **Toda capa decorativa va DEBAJO de los canvas**, en la pila de `background` de `#escena`
   (`SandCanvas.astro`), nunca superpuesta. El color de la arena sale de la portada del disco y es lo
   único saturado del cuadro: cualquier velo o trama por encima lo apaga — unas rayas sobre el canvas
@@ -247,13 +252,16 @@ La justificación de fondo de cada decisión de física está en el README, secc
   contacto con agua va **antes** de la puerta de cohesión y no al aterrizar; y el agua **se filtra**
   por la arena intercambiándose con ella, nunca absorbiéndose.
 - **Constantes en celdas nuevas, del grupo que `regrain` NO alcanza:** `FLOW_REACH`, `SOAK_P`,
-  `WET_HOLD` en `physics.ts`, y `SWEEP_FRAMES`, `DRY`, `SEEP` en `moisture.ts`. Si vuelves a mover
-  `cell` de verdad, van con las demás.
+  `WET_HOLD` en `physics.ts`, `SWEEP_FRAMES`, `DRY`, `SEEP` en `moisture.ts`, y `BURN_TIME` /
+  `FRONT_SPEED` / `CAP` en `fire.ts`. Si vuelves a mover `cell` de verdad, van con las demás.
+  (`FRONT_SPEED` sí se multiplica por `k` en tiempo de ejecución, porque va por longitud; `BURN_TIME`
+  es un tiempo y no se toca.)
 - **`moisture.ts` es el único sitio que toca celdas dormidas**, y tiene que llamar a `wake` cuando la
   humedad cambia o el lodo se seca en el array y sigue de pie en pantalla. Cuesta 0,03 ms sobre un
   lienzo seco y sube la simulación de 1,7 a 4,2 ms con el lienzo entero de lodo secándose.
-- **`dump()` saca `~` para el agua y la arena mojada en MAYÚSCULA (`O` contra `o`).** Es lo único con
-  lo que se ve por dónde va el frente de mojado.
+- **`dump()` saca `~` para el agua, la arena mojada en MAYÚSCULA (`O` contra `o`) y `*` para la pared
+  que arde.** Es lo único con lo que se ve por dónde va el frente de mojado o el del fuego — la
+  pared ardiendo sigue siendo `WALL`, así que sin el glifo saldría como cualquier otra.
 - **Para medir física, un banco en Node vale mucho más que el navegador.** La pestaña del MCP se
   estrangula sola —se han visto 4 fps— y entonces `msSim` mide hasta tres pasos por fotograma y no
   significa nada: con 550 granos marcaba 7,6 ms. Los módulos de `src/sand/` no importan nada de
@@ -273,9 +281,11 @@ Todo desde la consola del navegador, sobre `window.fabrica`:
 
 - `fabrica.dump(x, y, w, h)` — vuelca los materiales de una región como texto. **Es la que
   encontró todos los bugs de física**; sin ella no se ve por qué la arena no pasa.
-- `fabrica.inspect()` — arena, **agua**, **mojada**, paredes, fps, coste real de simulación y
-  pintado, celdas despiertas.
-- `fabrica.setEmitMaterial('sand' | 'water')` — lo mismo que el botón del dock, sin gesto.
+- `fabrica.inspect()` — arena, **agua**, **mojada**, **fuego**, paredes, fps, coste real de
+  simulación y pintado, celdas despiertas.
+- `fabrica.setEmitMaterial('sand' | 'water')` — sólo la **fuente de serie**; las colocadas traen lo
+  suyo de su ficha. Para poner una de agua sin gestos: `fabrica.beginPlacement('emitter', 'water')`.
+- `fabrica.setTool('fire' | 'draw')` — la antorcha, sin gesto. `fabrica.tool` la lee.
 - `fabrica.clear()` — vacía el lienzo (arena, paredes y piezas).
 - `fabrica.beginPlacement(kind)` / `movePlacement(x, y)` / `endPlacement()` — coloca una
   pieza sin gestos. Imprescindible para probar con Playwright: los `PointerEvent`
@@ -301,6 +311,15 @@ Todo desde la consola del navegador, sobre `window.fabrica`:
 - **Para saber si un punto agarra una pieza, mira si la pieza se movió** — nunca si apareció pared.
   Cerca del borde superior no se puede dibujar, así que «no hay pared nueva» sale igual cuando el
   gesto agarró que cuando no llegó a hacer nada, y da un mapa del área activa que es pura ficción.
+- **Al probar el fuego contra el agua, un cuenco con costados se inunda ENTERO.** El agua se nivela y
+  moja el trazo de punta a punta, así que no queda un solo sitio donde prender y `fire.light` devuelve
+  `false` en todos: parece que la antorcha esté rota y lo que pasa es que está bien. Para ver el
+  frente parándose contra el agua hace falta un trazo plano y sin costados, con la fuente de agua
+  encima de un tramo — el agua se derrama por los extremos y deja seca la otra mitad.
+- **Una lectura de `opacity` justo después de tocar una clase del dock no vale.** Las fichas llevan
+  `transition: opacity 200ms`, así que `getComputedStyle` devuelve el valor de partida y `#dock.lleno`
+  parece no aplicar. Hay que esperar 400 ms antes de leer; sin eso di por rota una regla de CSS que
+  estaba perfecta.
 - **Para juzgar cómo se ve una pieza, recórtala del `#fx` ampliada**: `s = fx.width / grid.w` son
   px de canvas por celda, con el dpr ya dentro. A tamaño real una pieza mide unos 60 px y ahí se
   pierde casi todo el detalle — mirarla ampliada es lo que evita decidir sobre lo que no se ve.
@@ -315,19 +334,16 @@ serie, y una medida hecha sobre la paleta equivocada no lo parece.
 
 ## Rendimiento
 
-El coste va con la arena **en movimiento**, no con la total: los granos asentados se
-duermen. Medido: 90.000 granos → 1,4 ms de simulación por frame de un presupuesto de 16,7.
-Si algo va lento, el sospechoso no es el número de granos.
+El coste va con la arena **en movimiento**, no con la total: los granos asentados se duermen.
+Medido: 90.000 granos → 1,4 ms de simulación de un presupuesto de 16,7; cuatro piezas a la vez,
+2,4 ms; una explosión con 1.300 granos en vuelo, 1,4; un trazo largo ardiendo, 2-3 ms. Si algo va
+lento, el sospechoso no es la cantidad de arena — serían las partículas de ejecta o el borrado de
+cuerpos.
 
-Las piezas tampoco lo son: cuatro a la vez subían la simulación a 2,4 ms, y una explosión
-con 1.300 granos en vuelo la deja en 1,4. Los sospechosos serían el número de partículas de
-ejecta o el borrado de cuerpos, nunca la cantidad de arena.
-
-La caída libre lleva desde el commit `8cf5cdc` una deriva lateral (`DRIFT_P` en
-`physics.ts`) — la única rama que se le ha añadido al bucle caliente. Cuesta un `rand()`
-por grano **en vuelo** y por frame, no por grano: 1,07 → 1,13 ms con la escena cargada. Es
-una perilla de gusto con un margen útil estrecho; los números de la calibración están en el
-README.
+La deriva lateral de la caída libre (`DRIFT_P` en `physics.ts`) es **la única rama que se le ha
+añadido nunca al bucle caliente**, y cuesta un `rand()` por grano en vuelo: 1,07 → 1,13 ms con la
+escena cargada. Ni las piezas ni el fuego le han añadido ninguna otra, y hay que mantenerlo así.
+Los números de la calibración están en el README.
 
 `inspect().despiertas` sale disparado después de un `clear()` y no significa nada:
 `clearWorld` marca todas las celdas como despiertas y las vacías nunca se vuelven a dormir,
@@ -335,11 +351,6 @@ porque el autómata solo recorre las que tienen arena. Es previo a las piezas.
 
 ## Historia
 
-El color salía de la portada del disco que sonara, vía Last.fm: dos endpoints (`/api/now-playing`,
-`/api/art`), sus gemelos en PHP, un poller y un median-cut en `color/extract.ts`. Se quitó entero
-—no está desconectado, está borrado— porque el color era de quien publicaba la página y no de quien
-la mira. Está en el historial si hace falta recuperarlo.
-
-El primer commit (`253dbfc`) es una versión distinta del proyecto: una fábrica generativa
-con línea de ensamblaje, cintas, balancines y cuenca. Se descartó porque solo se podía
-mirar. La física de cintas y rampas sigue en `physics.ts` aunque no se use.
+Lo que hubo y ya no está —el color por Last.fm y sus endpoints, la fábrica generativa del primer
+commit, el flujo de assets tramados— vive en **`docs/historia.md`**. Nada de eso es contexto
+operativo; se saca de aquí para que este archivo no se pague entero en cada sesión.

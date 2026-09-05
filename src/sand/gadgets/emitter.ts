@@ -1,6 +1,7 @@
 import type { Grid } from '../grid';
 import { drawJetHint, jetBox, type DrawCtx } from '../render';
 import { mulberry32 } from '../rng';
+import { SAND } from '../materials';
 import { Source, SPREAD_ROWS } from '../world';
 import { Wick } from './blast';
 import type { Blast, Gadget, TickCtx } from './index';
@@ -49,7 +50,13 @@ const REBIRTH = 2.5;
 const PLACED_HINT = 1.2;
 
 /**
- * Fuente de arena colocable.
+ * Fuente colocable, de arena o de agua.
+ *
+ * Cual de las dos lo decide la ficha con la que se saco y no vuelve a cambiar:
+ * un chorro echa lo que prometia su icono. Hubo un interruptor de escena que
+ * las pasaba todas a agua o a arena de golpe y con dos fichas eran dos sitios
+ * diciendo lo mismo — colocabas una de arena y el interruptor la volvia de agua
+ * sin haberla tocado.
  *
  * Es la misma `Source` de la escena, solo que puesta donde el usuario quiera.
  * Cada una lleva su propio generador aleatorio, asi que rota su color dominante
@@ -111,6 +118,12 @@ export class Emitter implements Gadget {
      * ancho y con un caudal que no llena lo que llenaba. Ver `regrain`.
      */
     k = 1,
+    /**
+     * Que siembra. Solo se aplica a la `Source` que se crea aqui: la fuente
+     * fija adopta la del mundo y no hay que pisarle nada — el drenaje y los
+     * cambios de paleta hablan con esa, y llegado aqui ya trae lo suyo.
+     */
+    material: number = SAND,
   ) {
     this.permanent = adoptada !== undefined;
     this.source =
@@ -124,6 +137,7 @@ export class Emitter implements Gadget {
         cy,
         Math.max(1, Math.round(SPREAD_ROWS * k)),
       );
+    if (!adoptada) this.source.material = material;
   }
 
   /** La fuente fija de la escena, envuelta como pieza. */
@@ -132,13 +146,19 @@ export class Emitter implements Gadget {
   }
 
   /**
-   * Que siembra. Lo escribe el bucle en cada paso, y tambien la colocacion
-   * mientras se arrastra el fantasma: la forma del chorro depende del material
-   * —el agua sale recta y la arena en cono—, asi que un fantasma que no lo
-   * supiera prometeria un cono por donde luego va a salir un chorro.
+   * Que siembra. Se fija al crearla y no vuelve a moverse.
+   *
+   * Queda expuesto porque la fuente de serie adopta la `Source` del mundo y hay
+   * que poder cambiarle el material desde la consola para medir el agua sin
+   * arrastrar nada (`fabrica.setEmitMaterial`).
    */
   setMaterial(m: number): void {
     this.source.material = m;
+  }
+
+  /** Lo que sale de este chorro. Lo mira el dock para saber que ficha es. */
+  get material(): number {
+    return this.source.material;
   }
 
   onMoved(): void {
@@ -194,7 +214,6 @@ export class Emitter implements Gadget {
     // dentro de su propia explosion no se lee como una boquilla destruida.
     if (paso === 'humo') return;
 
-    this.setMaterial(c.material);
     this.source.tick(c.grid, dt, c.palette, c.rand, c.budget);
   }
 

@@ -1,17 +1,24 @@
 import { createWorld, clearWorld, isDrawable, transferDrawing, type World } from './world';
-import { hasWallNear, paintStroke, type Point } from './draw';
+import { alongStroke, hasWallNear, paintStroke, type Point } from './draw';
 import { step } from './physics';
 import { moisture } from './moisture';
-import { Renderer, type DrawCtx } from './render';
-import { Input } from './input';
-import { SAND, WATER } from './materials';
+import { Fire } from './fire';
+import { Renderer, type CursorMode, type DrawCtx } from './render';
+import { Input, type Tool } from './input';
+import { SAND, WALL, WATER } from './materials';
 import { DEFAULT_PALETTE, THEME, type Palette } from './palette';
 import { mulberry32 } from './rng';
 import { Ejecta } from './ejecta';
 import { createGadget, GadgetLayer, type Gadget, type GadgetKind } from './gadgets';
 import { Emitter } from './gadgets/emitter';
 
-/** Lo que siembran las fuentes. Lo elige el boton del dock. */
+/**
+ * Lo que siembra una fuente. Se elige al colocarla, con la ficha.
+ *
+ * Ya no es un interruptor de escena: cada chorro lleva el suyo y no cambia. El
+ * unico sitio que aun habla en estos terminos es `setEmitMaterial`, que es una
+ * ayuda de consola para la fuente de serie.
+ */
 export type EmitMaterial = 'sand' | 'water';
 
 export interface BootOptions {
@@ -54,6 +61,15 @@ export interface DockHooks {
    * para hacer sitio.
    */
   onCount(count: number, full: boolean, onlyBomb: boolean): void;
+  /**
+   * Cambio la herramienta activa.
+   *
+   * La antorcha se apaga sola al empezar a colocar una pieza, y sin avisar de
+   * eso su boton se quedaria resaltado prometiendo un modo que ya no esta. Es
+   * el mismo motivo por el que `onCount` se deduce comparando en vez de
+   * acordarse de llamarlo en cada sitio.
+   */
+  onTool(tool: Tool): void;
 }
 
 export interface SandApp {
@@ -61,11 +77,17 @@ export interface SandApp {
   /** Cambia la paleta con una pausa de "cambio de turno" de por medio. */
   setPalette(p: Palette): void;
   /**
-   * Cambia lo que siembran TODAS las fuentes, desde el fotograma siguiente.
-   * No repinta nada de lo ya caido: el charco sigue siendo charco.
+   * Cambia lo que siembra la fuente de SERIE, desde el fotograma siguiente.
+   *
+   * Ayuda de consola, no interfaz: las fuentes que se colocan traen su material
+   * de la ficha con la que se sacaron y no se les toca. Sirve para medir agua
+   * sin arrastrar nada. No repinta lo ya caido: el charco sigue siendo charco.
    */
   setEmitMaterial(m: EmitMaterial): void;
   readonly emitMaterial: EmitMaterial;
+  /** La antorcha: con `'fire'`, el gesto prende paredes en vez de dibujarlas. */
+  setTool(t: Tool): void;
+  readonly tool: Tool;
   /** Vacia el lienzo. */
   clear(): void;
   readonly palette: Palette;
@@ -83,14 +105,16 @@ export interface SandApp {
     donde: Array<{ kind: string; x: number; y: number; r: number }>;
     ejecta: number;
     perdidos: number;
+    /** Celdas de pared ardiendo ahora mismo. */
+    fuego: number;
   };
   /** Vuelca los materiales de una region como texto. Depuracion pura. */
   dump(x0: number, y0: number, w: number, h: number): string[];
 
   // --- Colocacion de piezas, para el dock ---------------------------------
   setDockHooks(h: DockHooks): void;
-  /** Empieza a arrastrar una ficha del dock. */
-  beginPlacement(kind: GadgetKind): void;
+  /** Empieza a arrastrar una ficha del dock. `material` solo le importa a la fuente. */
+  beginPlacement(kind: GadgetKind, material?: EmitMaterial): void;
   /** Mueve el fantasma. Coordenadas de pantalla: el dock captura el puntero. */
   movePlacement(clientX: number, clientY: number): void;
   /** Suelta la ficha. Devuelve true si la pieza se coloco. */
@@ -108,13 +132,13 @@ export function boot(opts: BootOptions): SandApp {
 
   let palette: Palette = DEFAULT_PALETTE;
   /**
-   * Que siembran las fuentes. Global y no por fuente: es un interruptor de la
-   * escena, como la paleta, no una propiedad de cada pieza.
+   * La herramienta activa.
    *
    * No persiste en `localStorage` — al reves que la paleta. La paleta es una
-   * preferencia; arrancar en agua sin haberlo pedido se leeria como un fallo.
+   * preferencia; arrancar con la antorcha encendida sin haberlo pedido seria
+   * descubrirlo quemando el primer trazo que dibujas.
    */
-  let emitMaterial: EmitMaterial = 'sand';
+  let tool: Tool = 'draw';
 
   let world!: World;
   let renderer!: Renderer;
@@ -127,6 +151,12 @@ export function boot(opts: BootOptions): SandApp {
   // tirar lo que el usuario haya colocado, igual que no tira su dibujo.
   const gadgets = new GadgetLayer();
   const ejecta = new Ejecta();
+  /**
+   * Las paredes que arden. Fuera de `build()` como la ejecta, pero al reves que
+   * ella se vacia en cada reconstruccion: guarda indices de celda, y en un grid
+   * de otro tamano un indice apunta a cualquier sitio.
+   */
+  const fire = new Fire();
   let dock: DockHooks | null = null;
   /**
    * La pieza que se esta arrastrando. Puede ser una del lienzo (`held`) o el
@@ -155,6 +185,18 @@ export function boot(opts: BootOptions): SandApp {
    * notificacion, y su hueco se quedaba sin liberar — el dock seguia
    * anunciandose lleno con una plaza libre.
    */
+  /**
+   * Apaga o enciende la antorcha, avisando al dock.
+   *
+   * Vive aqui dentro y no solo en la interfaz publica porque hay dos sitios que
+   * la apagan solos: colocar una pieza y vaciar el lienzo.
+   */
+  function usarHerramienta(t: Tool): void {
+    if (t === tool) return;
+    tool = t;
+    dock?.onTool(t);
+  }
+
   let announced = -1;
   const announce = (): void => {
     announced = gadgets.count;
@@ -270,7 +312,13 @@ export function boot(opts: BootOptions): SandApp {
       // el reescalado de las piezas corre justo despues y la va a convertir.
       world.source.x = previous.source.x;
       world.source.y = previous.source.y;
+      // Y lo que sembraba: sin esto, redimensionar la ventana devolvia la
+      // fuente de serie a arena aunque se le hubiera puesto agua a mano.
+      world.source.material = previous.source.material;
     }
+    // Los indices de celda no sobreviven a un grid nuevo. Se ata antes de que
+    // nadie pueda prender nada.
+    fire.attach(world.grid);
     // La fuente de la escena es una pieza mas, solo que fija: se arrastra y
     // estorba a las demas como cualquiera, pero no ocupa hueco ni se puede
     // quitar. Se reinstala en cada build porque el mundo nuevo trae su `Source`.
@@ -304,6 +352,35 @@ export function boot(opts: BootOptions): SandApp {
       // El boton de quitar cae fuera del radio de la pieza, asi que tambien
       // tiene que reclamar el gesto: si no, pulsarlo dibujaria una pared.
       hasGadget: (c) => gadgets.hit(c.x, c.y) !== null || overBadge(c),
+
+      tool: () => tool,
+
+      // La antorcha recorre el segmento con el MISMO paso que la brocha
+      // (`alongStroke`), asi que prende exactamente donde el circulo del cursor
+      // dice que va a prender. El radio tambien es el de la brocha: si fuera
+      // mayor, el circulo estaria mintiendo sobre su alcance.
+      ignite: (from, to) => {
+        const g = world.grid;
+        const r = world.profile.brush;
+        const r2 = r * r;
+        alongStroke(from, to, r, (cx, cy) => {
+          const x0 = Math.max(0, Math.floor(cx - r));
+          const x1 = Math.min(g.w - 1, Math.ceil(cx + r));
+          const y0 = Math.max(0, Math.floor(cy - r));
+          const y1 = Math.min(g.h - 1, Math.ceil(cy + r));
+          for (let y = y0; y <= y1; y++) {
+            const dy = y - cy;
+            for (let x = x0; x <= x1; x++) {
+              const dx = x - cx;
+              if (dx * dx + dy * dy > r2) continue;
+              if (fire.light(g, x, y)) gadgets.spark(x, y);
+            }
+          }
+          // Y enciende piezas aunque no haya ni una pared donde prender: tocar
+          // una bomba con la antorcha tiene que detonarla, haya trazo o no.
+          gadgets.spark(Math.round(cx), Math.round(cy));
+        });
+      },
 
       grab: (c) => {
         if (hovered && overBadge(c)) {
@@ -403,10 +480,14 @@ export function boot(opts: BootOptions): SandApp {
    *  1. El drenaje decide si abre.
    *  2. Las piezas borran y reescriben su cuerpo (dos pasadas, ver GadgetLayer).
    *  3. Los emisores siembran.
-   *  4. La arena en vuelo se integra y aterriza, ANTES del automata, para que
+   *  4. El fuego. Despues de las piezas, porque los cuerpos se estampan ahi y
+   *     el chispazo tiene que encontrarlas ya en su sitio; y antes del
+   *     automata, para que la pared que acaba de consumirse suelte lo que
+   *     aguantaba en este mismo paso.
+   *  5. La arena en vuelo se integra y aterriza, ANTES del automata, para que
    *     lo que acaba de depositarse se asiente en este mismo paso en vez de
    *     quedarse flotando un frame.
-   *  5. El automata. Intacto: las piezas no le anaden ni una rama.
+   *  6. El automata. Intacto: ni las piezas ni el fuego le anaden una rama.
    */
   function simulate(dt: number): void {
     const { grid, source, drain, profile } = world;
@@ -414,10 +495,11 @@ export function boot(opts: BootOptions): SandApp {
 
     const headroom = (): number => Math.max(0, profile.maxSand - grid.ocupadas);
 
-    const material = emitMaterial === 'water' ? WATER : SAND;
-    gadgets.tick({ grid, ejecta, palette, material, rand, budget: headroom() }, dt);
+    gadgets.tick({ grid, ejecta, palette, rand, budget: headroom() }, dt);
     // Una pieza puede haberse consumido sola (la bomba al estallar).
     if (gadgets.count !== announced) announce();
+
+    fire.step(grid, dt, profile.k, (x, y) => gadgets.spark(x, y));
 
     ejecta.step(grid, dt);
     // El filtrado y el secado van ANTES del automata: la humedad que cambia
@@ -430,6 +512,9 @@ export function boot(opts: BootOptions): SandApp {
   function render(): void {
     renderer.paintSand(ejecta);
     const d = renderer.beginFx();
+    // Debajo de las piezas y de los tiradores: el aro de la pieza senalada y su
+    // aspa tienen que quedar por encima de cualquier cosa que este ardiendo.
+    fire.draw(d);
     gadgets.draw(d);
 
     // El fantasma es una pieza de verdad sin colocar: se pinta con su propio
@@ -453,7 +538,11 @@ export function boot(opts: BootOptions): SandApp {
       if (hovered) {
         drawHandles(d, hovered);
       } else {
-        renderer.drawCursor(d, input.x, input.y, world.profile.brush, input.mode === 'erase');
+        // El modo sale de la herramienta y no de `input.mode`, que se queda con
+        // el ultimo gesto: apagando la antorcha sin mover el raton, el cursor
+        // seguiria pintado de llama hasta el siguiente clic.
+        const modo: CursorMode = tool === 'fire' ? 'fire' : input.mode === 'erase' ? 'erase' : 'draw';
+        renderer.drawCursor(d, input.x, input.y, world.profile.brush, modo);
       }
     } else if (!held) {
       setHovered(null);
@@ -540,9 +629,9 @@ export function boot(opts: BootOptions): SandApp {
       `${profile.name}  ${grid.w}x${grid.h}  celda ${profile.cell}px`,
       `fps ${fps.toFixed(0)}  sim ${SIM_HZ / simDivider}Hz`,
       `arena ${grid.sandCount}  agua ${grid.waterCount}  paredes ${countWalls()}`,
-      `mojada ${countWet()}  siembra ${emitMaterial}`,
+      `mojada ${countWet()}  fuego ${fire.count}`,
       `sim ${msSim.toFixed(1)}ms  pintado ${msRender.toFixed(1)}ms`,
-      `brocha ${profile.brush}  modo ${input?.mode ?? '-'}`,
+      `brocha ${profile.brush}  util ${tool}  modo ${input?.mode ?? '-'}`,
       `piezas ${gadgets.count}  ejecta ${ejecta.count}  perdidos ${ejecta.lost}`,
     ];
     ctx.save();
@@ -636,10 +725,16 @@ export function boot(opts: BootOptions): SandApp {
       world.source.newBatch();
     },
     setEmitMaterial(m: EmitMaterial): void {
-      emitMaterial = m;
+      world.source.material = m === 'water' ? WATER : SAND;
     },
     get emitMaterial(): EmitMaterial {
-      return emitMaterial;
+      return world.source.material === WATER ? 'water' : 'sand';
+    },
+    setTool(t: Tool): void {
+      usarHerramienta(t);
+    },
+    get tool(): Tool {
+      return tool;
     },
     clear(): void {
       gadgets.clearAll(world.grid);
@@ -649,8 +744,10 @@ export function boot(opts: BootOptions): SandApp {
       // del que no cae nada y sin nada que explique por que.
       gadgets.setPermanent(Emitter.main(world.source));
       ejecta.clear();
+      fire.clear();
       held = null;
       ghost = null;
+      usarHerramienta('draw');
       clearWorld(world.grid, world.drain);
       announce();
     },
@@ -660,16 +757,23 @@ export function boot(opts: BootOptions): SandApp {
       announce();
     },
 
-    beginPlacement(kind: GadgetKind): void {
+    beginPlacement(kind: GadgetKind, material?: EmitMaterial): void {
       if (!gadgets.roomFor(kind)) return;
+      // Sacar una ficha apaga la antorcha. Si no, se coloca la pieza y el
+      // primer trazo que se dibuja despues sale ardiendo sin que nada lo haya
+      // anunciado — el boton sigue encendido, pero nadie mira ahi.
+      usarHerramienta('draw');
       // Nace fuera de la pantalla: hasta el primer movimiento no hay sitio al
       // que apuntar, y aparecer en la esquina superior izquierda seria un
       // parpadeo en un sitio que no significa nada.
-      ghost = createGadget(kind, -1000, -1000, { gridW: world.grid.w, k: world.profile.k });
       // El fantasma de una fuente ensena el contorno de su chorro, y ese
-      // contorno depende del material: sin esto prometeria un cono de arena
-      // mientras esta cayendo agua.
-      if (ghost instanceof Emitter) ghost.setMaterial(emitMaterial === 'water' ? WATER : SAND);
+      // contorno depende del material —el agua se abre en la boca y luego baja
+      // recta—, asi que la ficha tiene que traerlo puesto desde el principio.
+      ghost = createGadget(kind, -1000, -1000, {
+        gridW: world.grid.w,
+        k: world.profile.k,
+        material: material === 'water' ? WATER : SAND,
+      });
       // El fantasma se lleva en la mano igual que una pieza ya colocada, y hay
       // piezas a las que eso les cambia el dibujo: la fuente no se ve, asi que
       // solo mientras la llevas ensena el cono por donde va a salir la arena.
@@ -756,6 +860,9 @@ export function boot(opts: BootOptions): SandApp {
         // un dump() de materiales no las encuentra.
         donde: gadgets.positions(),
         ejecta: ejecta.count,
+        // Celdas de pared ardiendo. Es la unica forma de ver de un vistazo si
+        // un incendio sigue vivo o ya se apago contra el agua.
+        fuego: fire.count,
         // Granos que no encontraron hueco al aterrizar. Deberia quedarse en
         // cero o casi: si sube sin parar, la ejecta esta perdiendo masa.
         perdidos: ejecta.lost,
@@ -776,6 +883,13 @@ export function boot(opts: BootOptions): SandApp {
             line += 'O';
             continue;
           }
+          // La pared que arde sigue siendo WALL, asi que en el volcado saldria
+          // como cualquier otra. Sin distinguirla no hay forma de ver por donde
+          // va el frente del fuego, que es lo primero que hace falta mirar.
+          if (grid.mat[i] === WALL && fire.burning(i)) {
+            line += '*';
+            continue;
+          }
           line += glyph[grid.mat[i]!] ?? '?';
         }
         lines.push(line);
@@ -787,3 +901,4 @@ export function boot(opts: BootOptions): SandApp {
 
 export type { Palette } from './palette';
 export type { GadgetKind } from './gadgets';
+export type { Tool } from './input';
