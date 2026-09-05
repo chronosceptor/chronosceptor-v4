@@ -7,6 +7,18 @@ versionado según [SemVer](https://semver.org/lang/es/).
 
 ### Added
 
+### Changed
+
+### Fixed
+
+### Removed
+
+### Security
+
+## [0.6.0] - 2026-09-04
+
+### Added
+
 - **Agua**, el segundo material que cae. Cae con la misma velocidad y la misma deriva que la arena,
   pero al posarse busca nivel en vez de hacer talud: corre de lado hasta ocho celdas por fotograma
   en la dirección que recuerda, y esa memoria de dirección no es un adorno — sin ella un charco no
@@ -86,12 +98,6 @@ versionado según [SemVer](https://semver.org/lang/es/).
   ms el bucle de una sola comparación de siempre, 1,75 con las dos comparaciones, 2,11 con la tabla.
   Lo mismo en el bucle de pintado: 0,36 / 0,54 / 0,76 ms. El caso peor de toda la función es un
   lienzo entero de lodo secándose, que sube la simulación a 4,2 ms de los 16,7 de presupuesto.
-
-### Fixed
-
-### Removed
-
-### Security
 
 ## [0.5.0] - 2026-09-04
 
